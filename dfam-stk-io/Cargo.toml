@@ -1,0 +1,12 @@
+[package]
+name = "dfam-stk-io"
+version = "0.1.0"
+edition = "2021"
+description = "Stockholm 1.0 parser and types for the Dfam toolchain"
+
+[lib]
+name = "dfam_stk_io"
+path = "src/lib.rs"
+
+[dependencies]
+smitten = { git = "https://github.com/Dfam-consortium/Smitten.git" }

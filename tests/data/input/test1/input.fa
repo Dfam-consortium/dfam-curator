@@ -1,0 +1,114 @@
+>seq1        : valid
+CGTTTGTGGTAATTTAGAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
+>seq1        : invalid (single base change)
+CGTTTGTGGTAATTTACAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
+>seq2_7_10   : valid
+AAAT
+>seq2_7_10_R : valid
+ATTT
+>seq2_6_10   : fixed_halfopen
+AAAT
+>Seq3_43_56  : valid (crosses FASTA line boundary)
+TTTCTCAACTAATT
+>Seq3_42_55  : fixed_plus1
+TTTCTCAACTAATT
+>Seq3_41_54  : fixed_plus2
+TTTCTCAACTAATT
+>Seq3_40_53  : fixed_plus3
+TTTCTCAACTAATT
+>Seq3_44_57  : fixed_minus1
+TTTCTCAACTAATT
+>Seq3_45_58  : fixed_minus2
+TTTCTCAACTAATT
+>Seq3_46_59  : fixed_minus3
+TTTCTCAACTAATT
+>seq1_1_20_R : fixed_remapped_unique not from 1-20 but rather 63-72
+TGTAGTTATTGTTTTAATGA
+>seq1_1_4    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+AATTTA
+>seq1_27_29  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+TTT
+>seq1_120_131_R : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+CACCGAGTACAC
+>seq1_120_131 : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+TCACGCAGAATA
+>Seq3_6_45_R_26_40_12_15_R : valid normalized equivalent should be Seq3:6-9_+
+GCCC
+>seq2_19_26_R : fixed_orient
+TAAAAAAG
+>seq1:1       : fixed_remapped_unique
+CGTTTGTGGTAATTTAGAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
+>seq1:1       : invalid (single base change)
+CGTTTGTGGTAATTTACAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
+>seq2:7-10   : valid
+AAAT
+>seq2:10-7   : valid
+ATTT
+>seq2:6-10   : fixed_halfopen
+AAAT
+>Seq3:43-56  : valid (crosses FASTA line boundary)
+TTTCTCAACTAATT
+>Seq3:42-55  : fixed_plus1
+TTTCTCAACTAATT
+>Seq3:41-54  : fixed_plus2
+TTTCTCAACTAATT
+>Seq3:40-53  : fixed_plus3
+TTTCTCAACTAATT
+>Seq3:44-57  : fixed_minus1
+TTTCTCAACTAATT
+>Seq3:45-58  : fixed_minus2
+TTTCTCAACTAATT
+>Seq3:46-59  : fixed_minus3
+TTTCTCAACTAATT
+>seq1:20-1   : fixed_remapped_unique not from 1-20 but rather 63-72
+TGTAGTTATTGTTTTAATGA
+>seq1:1-4    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+AATTTA
+>seq1:27-29  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+TTT
+>seq1:131-120 : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+CACCGAGTACAC
+>seq1:131-120 : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+TCACGCAGAATA
+>Seq3:45-6:26-40:15-12 : valid normalized equivalent should be Seq3:6-9_+
+GCCC
+>seq2:26-19  : fixed_orient
+TAAAAAAG
+>seq2:7-10_+   : valid
+AAAT
+>seq2:7-10_-   : valid
+ATTT
+>seq2:6-10_+   : fixed_halfopen
+AAAT
+>Seq3:43-56_+  : valid (crosses FASTA line boundary)
+TTTCTCAACTAATT
+>Seq3:42-55_+  : fixed_plus1
+TTTCTCAACTAATT
+>Seq3:41-54_+  : fixed_plus2
+TTTCTCAACTAATT
+>Seq3:40-53_+  : fixed_plus3
+TTTCTCAACTAATT
+>Seq3:44-57_+  : fixed_minus1
+TTTCTCAACTAATT
+>Seq3:45-58_+  : fixed_minus2
+TTTCTCAACTAATT
+>Seq3:46-59_+  : fixed_minus3
+TTTCTCAACTAATT
+>seq1:1-20_-   : fixed_remapped_unique not from 1-20 but rather 63-72
+TGTAGTTATTGTTTTAATGA
+>seq1:1-4_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+AATTTA
+>seq1:27-29_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+TTT
+>seq1:120-131_- : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+CACCGAGTACAC
+>seq1:120-131_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+TCACGCAGAATA
+>Seq3:6-45_-:26-40_+:12-15_- : valid normalized equivalent should be Seq3:6-9_+
+GCCC
+>seq2:19-26_-  : fixed_orient
+TAAAAAAG
+>myasm:mychr:4-43_+ : valid (mixed case in reference)
+TATATATATATATATATATATATATATATATATATATATA
+>myasm:mychr:4-43_- : valid (mixed case in reference)
+TATATATATATATATATATATATATATATATATATATATA

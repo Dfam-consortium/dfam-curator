@@ -1,0 +1,1737 @@
+cross_match repseq rep -matrix /u1/home/asmit/Matrices/25p41g.matrix -gap_init -25 -ins_gap_ext -5 -del_gap_ext -4 -minscore 200 -minmatch 7 -bandwidth 40 -alignments 
+cross_match version 1.090518
+
+Run date:time  201112:180454
+Query file(s):  repseq   Log file: repseq.log
+Subject file(s):   rep
+Presumed sequence type (from score matrix): DNA
+
+Pairwise comparison algorithm: banded Smith-Waterman
+
+Score matrix /u1/home/asmit/Matrices/25p41g.matrix
+    A   R   G   C   Y   T   K   M   S   W   N   X   Z
+A   8   1  -6 -13 -14 -15 -11  -2 -10  -3  -1  -7   3
+R   2   2   1 -13 -13 -14  -6  -5  -5  -5  -1  -7   3
+G  -2   3  10 -13 -13 -13  -1  -8  -1  -8  -1  -7   3
+C -13 -13 -13  10   3  -2  -8  -1  -1  -8  -1  -7   3
+Y -14 -13 -13   1   2   2  -5  -6  -5  -5  -1  -7   3
+T -15 -14 -13  -6   1   8  -2 -11 -10  -3  -1  -7   3
+K  -9  -5  -1  -9  -6  -2  -1  -9  -5  -5  -1  -7   3
+M  -2  -6  -9  -1  -5  -9  -9  -1  -5  -5  -1  -7   3
+S  -8  -4  -1  -1  -4  -8  -4  -4  -1  -8  -1  -7   3
+W  -3  -6 -10 -10  -6  -3  -6  -6 -10  -3  -1  -7   3
+N  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -1  -7   3
+X  -7  -7  -7  -7  -7  -7  -7  -7  -7  -7  -7  -7   3
+Z   3   3   3   3   3   3   3   3   3   3   3   3   3
+
+Gap penalties: gap_init: -25, gap_ext: -2, ins_gap_ext: -5, del_gap_ext: -4, 
+Using complexity-adjusted scores. Assumed background frequencies:
+ Aa: 0.295  Rr: 0.000  Gg: 0.205  Cc: 0.205  Yy: 0.000  Tt: 0.295  Kk: 0.000  Mm: 0.000  Ss: 0.000  Ww: 0.000  Nn: 0.000  Xx: 0.000  : 0.000  
+
+minmatch: 7, maxmatch: 20, max_group_size: 0 (turned off), minscore: 200, near_minscore: 200, bandwidth: 40, indexwordsize: 7, indexwordsize2: 4, word_offset: 2
+word_raw: 0
+vector_bound: 0
+gap1_minscore: 17, gap1_dropoff: -12
+masklevel: 80
+minmargin: 0.5
+splice_edge_length: 0, allocation: 1 bytes
+min_intron_length: 30, max_intron_length: 10000, max_overlap: 20, min_exon_length: 6 
+Variable sizes: int: 4, long int: 8, SEQ_AREA: 4, signed: 1
+
+
+Sequence file: repseq    50 entries
+Residue counts,  score matrix column # (* = last column):
+  A        8462    1
+  C        7438    4
+  G        5907    3
+  T        7237    6
+Total  29044 residues
+
+4 distinct alphabetic chars have freq > 1% -- 
+
+2961  9.03 0.00 1.19  PonBla_flattened_line_151930:2376-3748:466-1249      149   569 (215)  C rep   (0)   416     1  
+
+C PonBla_flattene       569 TCTTCTGATTGGTTGGCGGTGAGATAACAGGGTGATGTTTTGGGAATCTT 520
+                            ?????           i      i                i         
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       519 AACCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACCTATTTGTGCT 470
+                              i                                    v ii     v 
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       469 CAGCATGTAGTCACCATCCTCTACCTGGGCAGGGGTCTTCATTTCTATGG 420
+                                                 i       ii        vi     iii 
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       419 AACACCTGAAAGCTATGCATCAGATTGTTATGTATATCCCTTGAGGAGGA 370
+                                v  v    v     i                               
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       369 ACTAGAACTCTATTTTACCACTGAGCTATTATTTAAGCTATCATTACTTT 320
+                                 i     i     i i    i     i     ---   i       
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTACTTT 247
+
+C PonBla_flattene       319 TCTTGCTTGACTGCTTTTCCTTTGTTTCTGCATTCACTCACTTCCCTAAT 270
+                                   i                           v              
+  rep                   248 TCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAAT 297
+
+C PonBla_flattene       269 TAGTAACTGATTGAGTCTGCTCTTAGGAGCTCAGGGAAGGTGCCTAGGAG 220
+                                     v              v   i           --        
+  rep                   298 TAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGG--CCTAGGAG 345
+
+C PonBla_flattene       219 GCTAAAGCCTTTTTCTACAAAAAAGAACTGGGGGACAGGGAGGGGCTTTT 170
+                            i                    v     vi        v            
+  rep                   346 ACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTT 395
+
+C PonBla_flattene       169 GTACCCAGGAGGGCCCTGTAG 149
+                                  i         ?????
+  rep                   396 GTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.17 (26 / 12); Gap_init rate = 0.00 (2 / 421), avg. gap size = 2.50 (5 / 2)
+
+2851  8.31 4.79 0.00  PonBla_flattened_line_460201:654-1732:173-929      149   545 (212)  C rep   (0)   416     1  
+
+C PonBla_flattene       545 TCTCCTGATTGGTTGGTGCTGAGGTAACAGGGTGATATTTCGGGAATCTT 496
+                            ?????             v                 i             
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       495 AATCATCAACCTTCTAGTTCTTACTAATCTGGGGTCTACATGCTTGTGGT 446
+                                           i    iv  i i            i          
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       445 CAGCATGTAATCACCATCCTCCACCTGGGCAGGAGTCTTAGTTTCTACAT 396
+                                     i                   ii  i            i  v
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       395 CA-AACTCAAAGATATGCATCAGATTGTTATGTATATTCCTTGAGGAGGA 347
+                            v -               i                  i            
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       346 GCTAGGACTCTATTTTATTGCTGAACTATTGTTT---------------- 313
+                            i          i      i               ----------------
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       312 --CTTGACTGGTTTTCCTTTGTTTCTGCACTCCCTCACTTCCCTAATTAG 265
+                            --  i     v                  i                    
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       264 TAACTGCTTGTGTCTGCTCTTTGGAACTCAGGGAAGCTCTAGGAGACCAA 215
+                                      v                         vi         i  
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       214 AGCCTTTTCCTACAAATAAGAAACAGGGGACACAGAGGGGCTTTTGTACC 165
+                                    i       i       i        i                
+  rep                   351 AGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTACC 400
+
+C PonBla_flattene       164 CTGGAGGGTCCTTCAG 149
+                             v      i  ?????
+  rep                   401 CGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.12 (25 / 8); Gap_init rate = 0.01 (2 / 397), avg. gap size = 9.50 (19 / 2)
+
+2699  8.63 2.40 2.64  PonBla_flattened_line_217511:682-2361:782-1553      142   558 (214)  C rep   (0)   416     1  
+
+C PonBla_flattene       558 TCTTCTGATTGGTTAGTGGTGAGGTAAGAGGTAATAGGGTGATGTTCCAG 509
+                            ?????         i            -------i           i i 
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAA-------CAGGGTGATGTTTCGG 43
+
+C PonBla_flattene       508 GAATCTTAATCATCAAACCTCTGGTTCCA----GTCTGGGGTCTATGTGC 463
+                                            v i          ----            i    
+  rep                    44 GAATCTTAATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGC 93
+
+C PonBla_flattene       462 TAGTGGTCAGCGTGTAGTCACCATCCTCCACCTGGGTGAGGGGTCTTAGT 413
+                             v         i                          -           
+  rep                    94 TTGTGGTCAGCATGTAGTCACCATCCTCCACCTGGGTG-GGGGTCTTAGT 142
+
+C PonBla_flattene       412 TTCTGCAGAACAACTCAAAGACATATGGCAGATTGTAGTGCATATCCCTT 363
+                                                 i  ii v        vi  i         
+  rep                   143 TTCTGCAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTT 192
+
+C PonBla_flattene       362 GAGGAT---CTAGGACTCTGCTTTATTGCTGAACTATTGTTTAAGCTATC 316
+                                 v---           i     i                 ---   
+  rep                   193 GAGGAGGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATC 239
+
+C PonBla_flattene       315 ATTCCTTTTCTTGCTTGATTGCTTTTCCTTTGTTTCTGCATTCCCTCACT 266
+                            i  v           i  i                               
+  rep                   240 GTTACTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACT 289
+
+C PonBla_flattene       265 TCCCTAATTAATAACTGCTT-AGTCTGCTCTTTGGAAGTCAGGGAAGACC 217
+                                      i         -                v         i  
+  rep                   290 TCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCC 339
+
+C PonBla_flattene       216 TAGGAGACTAATGCCTTTTTCTACAAACATGAAATGTGGGGCACAAAGGT 167
+                                       v                 v    i v   i   ii   v
+  rep                   340 TAGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGG 389
+
+C PonBla_flattene       166 GCTTT-GTACC-AGGAGGGTCCCACAG 142
+                                 -     -i      i  ?????
+  rep                   390 GCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.27 (25 / 11); Gap_init rate = 0.02 (8 / 417), avg. gap size = 2.62 (21 / 8)
+
+2792  7.58 5.30 0.25  PonBla_flattened_line_43818:4629-6309:776-1496      149   544 (177)  C rep   (0)   416     1  
+
+C PonBla_flattene       544 TCTTCTGATTGGTTGGTGATGAGGTAATAGGGTGATGTTTCTGGAATGTC 495
+                            ?????             i        i             v     v i
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       494 AATCATCAGCCTTCTGGCTCCAACCAGTCTGGGGTCTA-GTGCTGGTGGT 446
+                                    i        i                    -     v     
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       445 CAGCAAGTAGTCACTATCCTCCACCTGGGGGAGAGGTCTTAGTTTCTACA 396
+                                 v        i              v i -             i  
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGG-GGTCTTAGTTTCTGCA 149
+
+C PonBla_flattene       395 GAACAGCTCAAAGGTGCGCGTCAGATTGTT--GTATATCCCTTGAGAAGA 348
+                                 i       i ii             --              i  i
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       347 AGCTAGGACTCTGCTTTATCACTGAACTATTGTTT--------------- 313
+                             i           i      i              ---------------
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTC 249
+
+C PonBla_flattene       312 ---CTTGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTA 266
+                            ---  i                                            
+  rep                   250 TTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTA 299
+
+C PonBla_flattene       265 GTAACTGTTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCATAGGGGACTA 216
+                                   i                               v    i     
+  rep                   300 GTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTA 349
+
+C PonBla_flattene       215 AAGCCTTTTTCTACAAACAAGAAACGGGGGACACAGAGGGCCTTTTGTAC 166
+                                                              i     v         
+  rep                   350 AAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTAC 399
+
+C PonBla_flattene       165 CTGGGAGGGTCCTGCTG 149
+                             i       i  ?????
+  rep                   400 CCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.29 (23 / 7); Gap_init rate = 0.01 (4 / 396), avg. gap size = 5.50 (22 / 4)
+
+2767  9.25 2.43 1.22  PonBla_flattened_line_93572:2492-4168:771-1514      130   540 (204)  C rep   (0)   416     1  
+
+C PonBla_flattene       540 TCTTCTGATTGGTTGGTGCTGAGGTAACAAGGGTGATGTTT--------- 500
+                            ?????             v          -           ---------
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACA-GGGTGATGTTTCGGGAATCT 49
+
+C PonBla_flattene       499 TAGTCATCAACTTTCTGGTTCCAACCAGTGTGGGTTCTATGTGCTTGTGG 450
+                              i        i                 v    v    i          
+  rep                    50 TAATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGG 99
+
+C PonBla_flattene       449 TCAGCATGTAACCGCCATCCGCCACTTGGGTGGGGGTCATAGTTCCTGTA 400
+                                      ii i      v    i            v     i   i 
+  rep                   100 TCAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCA 149
+
+C PonBla_flattene       399 GAACAACTCAA-GATATACATCAAATTGTTATGTATATCCCTTGAGAAGG 351
+                                       -     i i   i                      i   
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       350 AACTAGGACTCGGTTTTATTGATAAACTATTGTTTAATCTATCATTACTT 301
+                                       v       i v i             ---   i      
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTACTT 246
+
+C PonBla_flattene       300 TTCTTGCTTGACTGCCTTACCTTTGTTTCTGTCTTCCCTCACTTCCCTAA 251
+                                    i      i  v            iv                 
+  rep                   247 TTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAA 296
+
+C PonBla_flattene       250 CTAGTAACTGCTTGAGTCTGCTCTTTGGAACCCAGGGAAGGCCTAGGAAA 201
+                            i                              i                i 
+  rep                   297 TTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGA 346
+
+C PonBla_flattene       200 CTAAAGTCTTTTTCTACAAACAAGAAAAAGGGGACACCGAGGGGCTTTTG 151
+                                  i                    vi        v            
+  rep                   347 CTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTG 396
+
+C PonBla_flattene       150 TAACTGGGAGCGGACCAGAGG 130
+                              v i     -  v  ?????
+  rep                   397 TACCCGGGAG-GGCCCZZZZZ 416
+
+Transitions / transversions = 1.92 (25 / 13); Gap_init rate = 0.01 (5 / 411), avg. gap size = 3.00 (15 / 5)
+
+2609 12.11 0.48 1.66  PonBla_flattened_line_191500:762-2440:772-1559      150   570 (218)  C rep   (0)   416     1  
+
+C PonBla_flattene       570 TCTTCTGATTGGTTGGTGGTGAGGTAACAGGGTGACGTTTCAGGAATCTT 521
+                            ?????                              i     i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       520 AATCATCAACCTTCTGATTCCAACCAGTCTGGGGTCTA-ATGCTTGTGGC 472
+                                            i                     -i         i
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       471 AGGCATGTAGTCACCATATCCCTCCATCTGGGTAGGGGTCTTACTTCCTG 422
+                            vi               ---      i      i         v  i   
+  rep                   101 CAGCATGTAGTCACCAT---CCTCCACCTGGGTGGGGGTCTTAGTTTCTG 147
+
+C PonBla_flattene       421 ATGAAAAACTCAAACATATGCATCATATTGTTATGTAAAGTCCTTGAGGA 372
+                            vv   v        v      i   v           v vi         
+  rep                   148 CAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGA 197
+
+C PonBla_flattene       371 GAAACTAGGACCCTATTTTACCACTGA-CTATTGTTTTAGCTATCATTAC 323
+                             i         i  i     i i    -         v ---   i    
+  rep                   198 GGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTAC 244
+
+C PonBla_flattene       322 TTTTCTTGCTTAACTGCTTTCCCATTGTTTCTGCATTTCCTCTCTTCCCT 273
+                                      ii        i  v             i    v       
+  rep                   245 TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCT 294
+
+C PonBla_flattene       272 AATTACTAACTTCTTGTGTCTGCTCTTTGGCACTCTGTGAAGCCCTAGGA 223
+                                 v     v    v             v    v v    v       
+  rep                   295 AATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGA 344
+
+C PonBla_flattene       222 GAGTAAAGCCTTTTTTCTACAAATGAGAAATGCAGGACACAGAGGGGCTC 173
+                              v            -       ii     i vi      i        i
+  rep                   345 GACTAAAGCCTTTTT-CTACAAACAAGAAACGGGGGACACGGAGGGGCTT 393
+
+C PonBla_flattene       172 TTGTACCTAGGAAGGCCCCACAG 150
+                                   ii   i     ?????
+  rep                   394 TTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.43 (30 / 21); Gap_init rate = 0.01 (5 / 421), avg. gap size = 1.80 (9 / 5)
+
+2392  9.79 1.70 13.19  PonBla_flattened_line_12106:7970-9650:774-1601      151   620 (208)  C rep   (0)   416     1  
+
+C PonBla_flattene       620 TCTTCTGATTGGTTGGTGGGGAGGTAACGGGGCGATGTTTTGGAAAT--- 574
+                            ?????              v        i   i       i  i   ---
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       573 ----ATCAACCTTCAGTTTCCAACCAGTCTGGGGTCTACAAGCTCGTGGT 528
+                            ----          v v                      iv   i     
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       527 CAGCATGCAGACACCATCCTCCACCTGGTTGTGGGTGGGGCGGGGGGGGG 478
+                                   i  v                 ----------- i     ----
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGG-----------GTGGGGG---- 135
+
+C PonBla_flattene       477 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGCGCGGTTCTTAGTT 428
+                            ------------------------------------------        
+  rep                   136 ------------------------------------------TCTTAGTT 143
+
+C PonBla_flattene       427 TCTGTAGAACAACTCAAAGATATGAGTCAGACTATTATGTATATCTCTTG 378
+                                i                   v      i i           i    
+  rep                   144 TCTGCAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTG 193
+
+C PonBla_flattene       377 AAGAGGAGCTAGGAGTCTGTTTTATCACTGAACTATTGTTTAAAGTATCA 328
+                             i     i      v           i                 ---  i
+  rep                   194 AGGAGGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAA---TCG 240
+
+C PonBla_flattene       327 TTGCTTTTCTTGCTTGACTGCTTT-CCTTTGTTTCTGCATTCCCTTACTT 279
+                              i           i         -                    i    
+  rep                   241 TTACTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTT 290
+
+C PonBla_flattene       278 CCCTAATTAGTAACTGTTTATGTCTGCTCTTTGGAATGCCAGGAAAGCCT 229
+                                            i  iv               iv vi    i    
+  rep                   291 CCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCT 340
+
+C PonBla_flattene       228 AGGAGATTATAAAGTCTTTTTCTGTAAACAAGAAGTGGGGAACACGGAGG 179
+                                  i  --   i        ii         ii    i         
+  rep                   341 AGGAGACTA--AAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGG 388
+
+C PonBla_flattene       178 GCCCTTCGTATCTGGGAGGGCCCCGCAG 151
+                             v i  i   i i          ?????
+  rep                   389 GGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.18 (35 / 11); Gap_init rate = 0.01 (6 / 470), avg. gap size = 11.67 (70 / 6)
+
+2444  7.20 8.59 1.66  PonBla_flattened_line_97400:2929-4608:774-1497      152   512 (212)  C rep   (0)   416    31  
+
+C PonBla_flattene       512 GGTGATGTTTCAGGAAAATCTTAATCATCAACCTTCCGGTTCAAGCCAGT 463
+                                       i    --                  i     v i     
+  rep                    31 GGTGATGTTTCGGGAA--TCTTAATCATCAACCTTCTGGTTCCAACCAGT 78
+
+C PonBla_flattene       462 CTGGGGTTT--GTTTTTGTGGTCGGCATGTATGTACTCACCATCCTCCAC 415
+                                   i --  vi        i       -  ---             
+  rep                    79 CTGGGGTCTACGTGCTTGTGGTCAGCATGTA-GT---CACCATCCTCCAC 124
+
+C PonBla_flattene       414 CTGGATGGTGGTCTTAGTTTCTGCAGAACAACTCAAAGATATGCATCAGA 365
+                                i   v                                   i     
+  rep                   125 CTGGGTGGGGGTCTTAGTTTCTGCAGAACAACTCAAAGATATGCGTCAGA 174
+
+C PonBla_flattene       364 TTGTTATGTATATCCCTTGAGGAG-AACTAGGACTCTGTTTTATTGCTGA 316
+                                                    -                   i     
+  rep                   175 TTGTTATGTATATCCCTTGAGGAGGAACTAGGACTCTGTTTTATCGCTGA 224
+
+C PonBla_flattene       315 ACTATT----------------------------TGCTTTTCTTTTGTTT 294
+                                  ----------------------------        i       
+  rep                   225 ACTATTGTTTAAATCGTTACTTTTCTTGCTCGACTGCTTTTCCTTTGTTT 274
+
+C PonBla_flattene       293 CTGTATTCCCTCACTTTCCTAATGAATAATGGCCTGAGTCTGCTCTTTGG 244
+                               i            i      v i   iv  i                
+  rep                   275 CTGCATTCCCTCACTTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGG 324
+
+C PonBla_flattene       243 AACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAAT 194
+                                                                             i
+  rep                   325 AACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAAC 374
+
+C PonBla_flattene       193 GGGGTACAGGGAGGAGCTTTTGTACCTGGGAGAGCCCTGCAG 152
+                                v   v     i           i     i    ?????
+  rep                   375 GGGGGACACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.71 (19 / 7); Gap_init rate = 0.02 (6 / 361), avg. gap size = 6.17 (37 / 6)
+
+2464 10.15 6.60 1.02  PonBla_flattened_line_63972:2729-4410:772-1527      150   543 (213)  C rep   (0)   416     1  
+
+C PonBla_flattene       543 CCTTCTGATTGGTTGGTGGTGAGGAAATAAGGTGATATTTTGGGGATCTT 494
+                            ?????                   v  i i      i   i   i     
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       493 AATCATCAAGCTTCTGGTTCCAACCAGTCTGGGGTCTACGGGCTTGTGAT 444
+                                     v                              v       i 
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       443 CAGCAAGGTGGTCACCATCCTCCAACTGGGTGGGG-TCTTAGTTTCTGCA 395
+                                 -v  i              v          -              
+  rep                   101 CAGCA-TGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCA 149
+
+C PonBla_flattene       394 GAACAACTCCAAGCT---TGTCGG---------------CCTTTAGGAGG 363
+                                     v   v ---i   i ---------------    v      
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       362 AACTAGGACT----TCTGTCGCTGAACTGTTG---AAGCTACCATTACGT 320
+                                      ---- i i          i   ---  --- i i    v 
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTACTT 246
+
+C PonBla_flattene       319 TTCTTGCTTGACCTTTCTTCCTTAGTTTCTGCATTCCCTCACTTCCCTAA 270
+                                    i   ivi i      v                          
+  rep                   247 TTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAA 296
+
+C PonBla_flattene       269 TTGGTAACCGCTTGAGTCTGCTCTTTGGAACTCAGGGAGGACCTAGGAGA 220
+                              i     i                             i i         
+  rep                   297 TTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGA 346
+
+C PonBla_flattene       219 CTAAAGCCTTTTTCCACAAACAAGGAACAGGTGACATGGAGGGGCTTTGG 170
+                                          i         i   i  v    i           v 
+  rep                   347 CTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTG 396
+
+C PonBla_flattene       169 TACCCGGGAGGACCCCACAG 150
+                                       i   ?????
+  rep                   397 TACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.08 (27 / 13); Gap_init rate = 0.02 (7 / 394), avg. gap size = 4.29 (30 / 7)
+
+2274 13.68 4.98 1.49  PonBla_flattened_line_3296:3108-4788:773-1536      150   551 (213)  C rep   (0)   416     1  
+
+C PonBla_flattene       551 TCTTCTGATTGGTTGGTGGT-------CCGGGTGCTGTTTCAGGAATCTT 509
+                            ?????               ------- v     v      i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       508 AAGCATCAGCCTTCTGGTTCCAGCCAGTCTGGGGTCTAAGTGCCTGTGGT 459
+                              v     i             i               v    i      
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       458 CAGTATGTAGTTACCAACCTCCACCTGGGTGGGAGGGCCTTCATTCCTGC 409
+                               i       i    v                --  i   vi  i    
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGG--GGTCTTAGTTTCTGC 148
+
+C PonBla_flattene       408 AGAACACCTCAAAGATTTGTGTCAGATTGTTACGCATAATCCTTGAGAAG 359
+                                  v         v  i            i i   vi       i  
+  rep                   149 AGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAG 198
+
+C PonBla_flattene       358 GAACTAGA----TGTCCTGTGACT---CTATTGTCTAAGCTATTCTTACT 316
+                                   i----   ii i vi  ---       i   ---  iv     
+  rep                   199 GAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTACT 245
+
+C PonBla_flattene       315 TTTCTTGCTTGAAGGCTTT-CCTCTGTTCCTGCATTCCCTCACTTCTCTA 267
+                                     i  vv     -   i    i                 i   
+  rep                   246 TTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTA 295
+
+C PonBla_flattene       266 ATTAGTAACCACTTGTGTCTGTTCTTTGGAACTCAGGGAAGGCCTAGGAG 217
+                                     ii    v     i                            
+  rep                   296 ATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAG 345
+
+C PonBla_flattene       216 ACT-----TTATTCCTACGAACAAGAGATGGGGGACACAGCCGGGGCTTT 172
+                               -----i v  i    i       i i         i v-        
+  rep                   346 ACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGA-GGGGCTTT 394
+
+C PonBla_flattene       171 TGTAACCAGAAAGGCCTCGTGG 150
+                                v  i i i    i?????
+  rep                   395 TGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.24 (38 / 17); Gap_init rate = 0.02 (8 / 402), avg. gap size = 3.25 (26 / 8)
+
+1799 12.89 7.64 8.35  PonBla_flattened_line_559405:0-1376:472-1251      151   569 (211)  C rep   (0)   416     1  
+
+C PonBla_flattene       569 TCTTCTGATTGGTTGGCAGTGGGATAACAGGGTGATGTTTGAGGAGTCTT 520
+                            ?????           ii   i i                vi   i    
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       519 AATCA---ACCTTCTGGTCCCCACCAG----GGGTCTTAATTTCCTGCAG 477
+                                 ---          i  v     ----      -- iv v  ----
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCT--ACGTGCT---- 94
+
+C PonBla_flattene       476 AACAACTCAAATATGTGTGTCAGATTGTTAGGCACT-TCCTT----TGAG 432
+                            -------------    -     vv   -  v   i-    i----  i 
+  rep                    95 -------------TGTG-GTCAGCATGT-AGTCACCATCCTCCACCTGGG 129
+
+C PonBla_flattene       431 -GAGGAACTAAGAATGTTT-----ATAACT--AAACTAT-TGTCA--TTA 393
+                            - i  iv  v  -- v i ----- i    --  iv   -i    --  i
+  rep                   130 TGGGGGTCTTAG--TTTCTGCAGAACAACTCAAAGATATGCGTCAGATTG 177
+
+C PonBla_flattene       392 CTTTTCTTCTTTAACTGCTTTTCCTTTGAGGAGGAACTAAGAAT--GTTT 345
+                            ----------   --  iv v   i              i  v --    
+  rep                   178 ----------TTA--TGTATATCCCTTGAGGAGGAACTAGGACTCTGTTT 215
+
+C PonBla_flattene       344 -ATAACTAAACTATTGT------CATTACTTTTCTTCTTTAACTGCTTTT 302
+                            -  vi  i         ------ i           vi ii         
+  rep                   216 TATCGCTGAACTATTGTTTAAATCGTTACTTTTCTTGCTCGACTGCTTTT 265
+
+C PonBla_flattene       301 CCTTTGTTTCTGCAGTCTCTCACTTCCCTAATTAGTAACTGCTCGAGTCT 252
+                                          v  i                         i      
+  rep                   266 CCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAGTAACTGCTTGAGTCT 315
+
+C PonBla_flattene       251 GCTCTTTGGAGCTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAA 202
+                                      i                                       
+  rep                   316 GCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAA 365
+
+C PonBla_flattene       201 ACAAGAAATGGCAGACATGGAGAGGCTTTTGCACCCAGGAGGGCCCCTCA 152
+                                    i  vi    i    i        i    i         ????
+  rep                   366 ACAAGAAACGGGGGACACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZZ 415
+
+C PonBla_flattene       151 G 151
+                            ?
+  rep                   416 Z 416
+
+Transitions / transversions = 2.00 (36 / 18); Gap_init rate = 0.05 (19 / 419), avg. gap size = 3.53 (67 / 19)
+
+2112 11.17 9.93 6.70  PonBla_flattened_line_210028:169-1850:774-1455      154   556 (126)  C rep   (0)   416     1  
+
+C PonBla_flattene       556 TCTTCTGATGGGTTGGTGGTGAGGTAAATGGGTGCTGTTTCAAGAATCTC 507
+                            ?????    v                 vv     v      ii      i
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       506 AATCATCAGCTTTCTGGTTCCAACCAGTCTGGGGTCCA-GTCCTTGTGTT 458
+                                    i i                         i -  v      v 
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       457 CAGCCTGAAGTTACCATCCTCCACCTGGGTGGGGGCCTTAGTTCCTGTAG 408
+                                v  v   i                       i       i   i  
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       407 AAGAACTCAAAGATATGTATCAGAAAAACTCAAAGATATGTATCAAAGGG 358
+                              v              ii     ------------ -   ---------
+  rep                   151 AACAACTCAAAGATATGCGTCAGA------------T-TGT--------- 178
+
+C PonBla_flattene       357 ATTTATATATATATCCCTTGAGGAGGAGCTAGGACTCTGCTCTATCACCG 308
+                            -----   i                  i           i i    i i 
+  rep                   179 -----TATGTATATCCCTTGAGGAGGAACTAGGACTCTGTTTTATCGCTG 223
+
+C PonBla_flattene       307 CACTATTGTTT--------------CTTGC----CTGCTCTTCCTTTGTT 276
+                            v          --------------     ----     i          
+  rep                   224 AACTATTGTTTAAATCGTTACTTTTCTTGCTCGACTGCTTTTCCTTTGTT 273
+
+C PonBla_flattene       275 TCTGCATTCCTTCACTTCCCTAGTTAGTAAGTGTTTGAATCTTCCCTTTG 226
+                                      i           i       v  i    i   v i     
+  rep                   274 TCTGCATTCCCTCACTTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTG 323
+
+C PonBla_flattene       225 GAACTCAGGGAAGGCCTA---------------------CAAACAAGAAA 197
+                                              ---------------------           
+  rep                   324 GAACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAA 373
+
+C PonBla_flattene       196 CACAGGACACAGAAAGGGTTTTGTACCTGGGAGGGACCTGCAA 154
+                             ivi      i  ii  v         i       v  ?????
+  rep                   374 CGGGGGACACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.00 (30 / 15); Gap_init rate = 0.02 (7 / 403), avg. gap size = 9.57 (67 / 7)
+
+2559  9.50 5.75 1.75  PonBla_flattened_line_153886:798-2466:769-1363      144   543 (52)  C rep   (0)   416     1  
+
+C PonBla_flattene       543 TCTTCTGATTCGTTGGTGGTGAGACATCAGGGTGGTGTTTTGGGAATCTT 494
+                            ?????     v            ii v       i     i         
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       493 AAGCATCAACCT---GGTTCCAGCCCGTCTGCGGTCTAC-TGCTTATTAT 448
+                              v         ---       i  v     v       -     i ---
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGT--- 97
+
+C PonBla_flattene       447 GGTCAGGATGTAGTCACCATCCTCCACCTGGATGGCTTGTCTTAGTTTCT 398
+                                  v                        i   -vv            
+  rep                    98 GGTCAGCATGTAGTCACCATCCTCCACCTGGGTGG-GGGTCTTAGTTTCT 146
+
+C PonBla_flattene       397 GCAGAAC-------------------GATTGTTATGTATATCCCTTGAGG 367
+                                   -------------------                        
+  rep                   147 GCAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGG 196
+
+C PonBla_flattene       366 AGGAACTAGGACTCTGTTTTATCACTGAACTATTGTTTAAGCCGTCTTTA 317
+                                                   i                ii   ---  
+  rep                   197 AGGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGT---TA 243
+
+C PonBla_flattene       316 CTTTTCTTGATTGACCACTTGCCCTTTGTTTCTTTATTCTTTCACTTCCC 267
+                                     v i   ii   vi           vi    ii         
+  rep                   244 CTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCC 293
+
+C PonBla_flattene       266 TAATTAGTAACTGCTTGAATCTGCTCTTTGGAACTCAAGGAAGGCCTAGG 217
+                                              i                  i            
+  rep                   294 TAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGG 343
+
+C PonBla_flattene       216 AGACCAAAGCCTTTTTCTACAAACAAGAAACAGGGGACAACGAGGGGCTT 167
+                                i                          i       vv         
+  rep                   344 AGACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTT 393
+
+C PonBla_flattene       166 TTGTATCCAGGAAGACCCCAAGG 144
+                                 i  i   i i   ?????
+  rep                   394 TTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.92 (25 / 13); Gap_init rate = 0.01 (6 / 400), avg. gap size = 5.00 (30 / 6)
+
+1643 12.69 28.79 0.00  PonBla_flattened_line_130870:1587-3266:774-1462      150   472 (217)  C rep   (0)   416     1  
+
+C PonBla_flattene       472 CATTCTGATTGGTTGGTGGTGAGGTAACAGGGTGGTGTTTCAGGAATCTT 423
+                            ?????                             i      i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       422 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTGC-TGCTTGTGGT 374
+                                                                 i -          
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       373 CAGCACATAGTCACTATCCTGCAC-TGGATGGGGGTTGTAGTTTCTGCAG 325
+                                 ii       i     v   -   i       iv            
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       324 AGCAACTCAAAGATAGGCACCAGATTGTTATCTACATCCCTTCAGGAGGA 275
+                             i             v  ii           v  i       v       
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       274 ACTGGGA----GTCCTGTGGCT---CTATGGTT----------------- 249
+                               i   ----  ii i v   ---    v   -----------------
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       248 ------------------------------------------CTAATCAT 241
+                            ------------------------------------------     i v
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       240 TAACTGCATGAGCCTCCTCTTTGGAACTTGGGGAAGGCC----AAACCAA 195
+                                   v    i  v            ii         ---- i  i  
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       194 AACC---------------------AGGGACTTGGAGGGGCTTTTGTATC 166
+                             i  ---------------------i     vi               i 
+  rep                   351 AGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTACC 400
+
+C PonBla_flattene       165 CAGGAAGACCTCACAA 150
+                             i   i i  i?????
+  rep                   401 CGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.73 (30 / 11); Gap_init rate = 0.02 (7 / 323), avg. gap size = 13.29 (93 / 7)
+
+1626 11.18 28.10 2.42  PonBla_flattened_line_84124:1121-2801:773-1484      151   481 (231)  C rep   (0)   416     1  
+
+C PonBla_flattene       481 TTTTCTGATTGGTTGGTGGTGAGGTAACAGAGTGATGCTTTGGGAATCTT 432
+                            ?????                         i      i  i         
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       431 AGTCATCACCCTTTTGGTTCCAACTAGTCTGGGGTTCTACCTACGTGCTG 382
+                             i      v    i          i          -----         v
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGT-----CTACGTGCTT 95
+
+C PonBla_flattene       381 GTGGTTAGCATGTAGTCACCATCCTCCACC-AGCTAGGGGTCTTAGTTTC 333
+                                 i                        -i v i              
+  rep                    96 GTGGTCAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTC 145
+
+C PonBla_flattene       332 TGCAGGACAACTGAAAGATATGCATCAGATTGTTATGTATATTCCTTGAG 283
+                                 i      v          i                  i       
+  rep                   146 TGCAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAG 195
+
+C PonBla_flattene       282 GCAGAACTAGGAGTC---------------CTAT---------------- 264
+                             vi         v  ---------------    ----------------
+  rep                   196 GAGGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACT 245
+
+C PonBla_flattene       263 ----------GACT-CT------------------------ACTGTCCTA 249
+                            ----------    -  ------------------------   vi    
+  rep                   246 TTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTA 295
+
+C PonBla_flattene       248 ATTCTTAACCGCTTGAGCCTGCTCTTTGGAACTTGGGGAAGGTC------ 205
+                               vv    i       i               ii       i ------
+  rep                   296 ATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAG 345
+
+C PonBla_flattene       204 ------------------AGACAAGAAGCCGGGACAGACATGGAGGGGCC 173
+                            ------------------ i       i v   ---    i        i
+  rep                   346 ACTAAAGCCTTTTTCTACAAACAAGAAACGGGG---GACACGGAGGGGCT 392
+
+C PonBla_flattene       172 T--ATAGCCAGGAAGGCCCCACAG 151
+                             --i  v  i   i     ?????
+  rep                   393 TTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.36 (26 / 11); Gap_init rate = 0.03 (9 / 331), avg. gap size = 11.22 (101 / 9)
+
+1993 17.88 5.29 0.50  PonBla_flattened_line_808:19285-20960:774-1442      145   541 (128)  C rep   (0)   416     1  
+
+C PonBla_flattene       541 TCCTCTGATTGGTTGGTGGGGAGGTGACGGGATGGTGCTCCAGGAATCTC 492
+                            ?????              v     i  i  i  i  i i i       i
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       491 AGGCATCAGCCTTCTGGTCCCCTCCACTCTGGGGTCTACGAGCTTGTG-- 444
+                             iv     i         i  vv   v             v       --
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       443 CAGACCCGAAGTCACCAGCCTGCCCCTGGGTGGGAGCCCCAGGTCCAGCA 394
+                               - vi v        v   v v          i i ii  v i v   
+  rep                   101 CAG-CATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCA 149
+
+C PonBla_flattene       393 GAAGCACTCAGAGGTTTGTACCAGATTGTTAAGTAAATCCCTCGAGGAGG 344
+                               vv     i  i v  iii          v   v      i       
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       343 AGCTGGGGCTCTGCTTTATCGCTGCACCAGTGTTT--------------- 309
+                             i  i  i     i          v  i v     ---------------
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTC 249
+
+C PonBla_flattene       308 ---CTTGACTGCCTTTCCTTTGTTTCTGCCTTCCCTCCCTTCCCTAATTA 262
+                            ---  i      i                v       v            
+  rep                   250 TTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTA 299
+
+C PonBla_flattene       261 GTAACTGTTTGAATCTGCACTTTGGCACTCGGGGA-GATTTAGGAGGCTG 213
+                                   i    i     v      v    i    - iii      i  i
+  rep                   300 GTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTA 349
+
+C PonBla_flattene       212 AAGCCTTCTTCCTGCAAACAAGAAATGGGGGACACAGAAAGGCTTTTGTA 163
+                                   i   - i           i         i  ii          
+  rep                   350 AAGCCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTA 398
+
+C PonBla_flattene       162 CCCAGAAGGGCCACGTAG 145
+                               i i      v?????
+  rep                   399 CCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.84 (46 / 25); Gap_init rate = 0.01 (5 / 397), avg. gap size = 4.60 (23 / 5)
+
+1943 17.41 10.03 0.26  PonBla_flattened_line_20334:9849-11529:775-1430      150   528 (128)  C rep   (0)   416     1  
+
+C PonBla_flattene       528 TCCTCTGACTGGTTGGTGGTGAGGTAACAGGGCAGTGTTCCAGGAATCTC 479
+                            ?????   i                       iii    i i       i
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       478 AGTCACCATCCT-CTGGTTCCAACCCGTCTGGGATCCACGTGCTTATGCT 430
+                             i   i  v   -            v       i  i        i  v 
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       429 TAGCCTGAAGTTACCAACCTCCACCTGGGTGGGGGCCTCAGTTCCTGCAG 380
+                            i   v  v   i    v                  i  i    i      
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       379 AATATCTCAGAGATCTTTACCACATTGTTATGCACATCCCCGCAGGAGGA 330
+                              i v    i    v viii  v         i i     ivv       
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       329 ACCAAGACCAGGCCCCAT-GCTGCACTATTGTTT---------CTTT--- 293
+                              i i   ivv iiii  -    v          ---------    ---
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       292 ------------------------CTGCATTCCCTCACTCCCTTAATTAG 267
+                            ------------------------               i  i       
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       266 TAACTGTTTGAATCTGCCCTTTGGAACTCAGGGAAAGTCTCGGCGACTGA 217
+                                  i    i     i                 i i  v  v    i 
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       216 AACATTTTTCCTCCAAACAAGAAATGGGGGACACGGAAAGGCTTTTGTAC 167
+                             i v      - v           i            ii           
+  rep                   351 AGCCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTAC 399
+
+C PonBla_flattene       166 ACAGGAGGGCACCCCAG 150
+                            v i       v ?????
+  rep                   400 CCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.14 (45 / 21); Gap_init rate = 0.01 (5 / 379), avg. gap size = 7.80 (39 / 5)
+
+1784 11.31 23.81 0.00  PonBla_flattened_line_118176:1194-2872:773-1371      151   486 (113)  C rep   (0)   416     1  
+
+C PonBla_flattene       486 TTTTCTGACTGGTTGGTGGTGAGGTAACAGGGTAGTGTTTCAGGCACCTT 437
+                            ?????   i                        ii      i  v i   
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       436 AAACATCAGCCTTCCAGTTCCAGCCAATCTGGGGTCTACGTGCTTGTGGT 387
+                              v     i     ii      i   i                       
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       386 CAGCATGTCGTTACCATCCTCCACCTGGATGGGGGTCTTAGTTTCTGCTG 337
+                                    v  i                i                   v 
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       336 AACAACTCAAAGATATGCATCAGATTGTTATGTGTATCCCTGGAAGAGGG 287
+                                              i              i       v  i    i
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       286 ACGAGGAGTC----------CTG------TG-----------ACT----- 269
+                              v    v  ----------   ------  -----------   -----
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       268 -------CTGTTTT------ATTACTGAA--------CTTCTCGAATCAT 240
+                            -------   i   ------i  v   v --------    i v   i v
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       239 TAAGTGTTTGAATCTGCTCTTTGTAACTCAGGGAAGGCC----------- 201
+                               v  i    i           v               -----------
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       200 -------------AGACAAGAAGCGGGGGACACAGAGGGGCTT--GTACC 166
+                            ------------- i       i          i         --     
+  rep                   351 AGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTACC 400
+
+C PonBla_flattene       165 CGG-AGGGCCCTGCAG 151
+                               -       ?????
+  rep                   401 CGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.92 (25 / 13); Gap_init rate = 0.03 (9 / 336), avg. gap size = 8.89 (80 / 9)
+
+1665 18.85 11.26 2.36  PonBla_flattened_line_381053:288-1969:774-1510      152   533 (204)  C rep   (0)   416     1  
+
+C PonBla_flattene       533 TCTTCTGATTGGCTGGTGGTGAGGTAA------------TTGGGACTCAG 496
+                            ?????       i              ------------ i    v  vv
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       495 CATCATCAGCCTTCTGGTTCCAACTGGCGTAGGGTCTATGTGCTTGTGGC 446
+                            v       i               ii iv i       i          i
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       445 TAACATGCAGTTAACTTCTTCCACCTGG-TGGGAGTTTCAGTATTTGCAA 397
+                            i i    i   i v v  i         -    i  i i   v i    i
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       396 AACAGCTCAAGGATATGCCTCAGAATATTATCTGTAGTCCTTGAGGAGGA 347
+                                i     i       v     v i    v i  vi            
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       346 ACTAAA--TTTGTTCCGTAGCTAAACTATTGTT---------ATTTTGTC 308
+                                ii-- i    iii v   i          --------- i   -  
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTT-TC 249
+
+C PonBla_flattene       307 TTGCTTG-----TTTTCCTTTGTTTCTGCTTTTTCTCACTCCTCTGATTA 263
+                                 i -----                 v  ii      i i  i    
+  rep                   250 TTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTA 299
+
+C PonBla_flattene       262 -----------AATTTGCTCTTTGTAACTCGGGGAAGGCCTAAAAGGCTA 224
+                            ----------- i i         v     i           ii  i   
+  rep                   300 GTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTA 349
+
+C PonBla_flattene       223 AAG--TTTTCCTATAAACAGGAGGCAGGCAGAGGACCTGGCAGGGGAAAG 176
+                               --    i   i     i  ii i  ----    vi  -     v---
+  rep                   350 AAGCCTTTTTCTACAAACAAGAAACGGG----GGACACGG-AGGGGC--- 391
+
+C PonBla_flattene       175 GTCTGT-CCCAGGAAGGCCCCATAG 152
+                            v i   -   i   i     ?????
+  rep                   392 TTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.00 (54 / 18); Gap_init rate = 0.03 (12 / 382), avg. gap size = 4.33 (52 / 12)
+
+1804 13.12 21.57 0.29  PonBla_flattened_line_169807:2541-3482:36-674      151   493 (146)  C rep   (0)   416     1  
+
+C PonBla_flattene       493 TCTTCTGATGAGTTCCTGGTGAGGTTACAGGGTGGTGTTTCTGAAA-CTT 445
+                            ?????    vi   vv         v        i      v i  -   
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       444 AA-------CCTTCTGGTTCCAGCCAGTCTGGGGTCTGCATGCTTGTGGT 402
+                              -------             i              i i          
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       401 CAGCATGTAGTCACCATCCTCCACTTGGGTGGGGGGTCTTAGTTTCCAGA 352
+                                                    i          -          iiv 
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGG-TCTTAGTTTCTGCA 149
+
+C PonBla_flattene       351 GAACAACTCAAAGGTATGCATCAGATTATTATCTGTCCTTCTTTGGGAGG 302
+                                         i     i       i    v i viii   vi     
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       301 AACTAGG----TGTCCCATGGCT---CTATTGT----------------- 276
+                                   ----   iii  v   ---       -----------------
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTC 249
+
+C PonBla_flattene       275 ------------------------------------------CCTAATCA 268
+                            ------------------------------------------      i 
+  rep                   250 TTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTA 299
+
+C PonBla_flattene       267 TTAACTTCTTGACCCTGCTCTTTGGAACTCAGGGAAGTCCTGGGAGGAAA 218
+                            v     v     vi                       v   i    ivv 
+  rep                   300 GTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTA 349
+
+C PonBla_flattene       217 AAGCCTTTTTCTACAAACAAGAAACAGGAGACACAAAGGGGCTTTTGTAC 168
+                                                     i  i     ii              
+  rep                   350 AAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTAC 399
+
+C PonBla_flattene       167 CCAGGAGGGCCCCACAG 151
+                              i         ?????
+  rep                   400 CCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.81 (29 / 16); Gap_init rate = 0.02 (6 / 343), avg. gap size = 12.50 (75 / 6)
+
+1557 18.97 9.11 6.65  PonBla_flattened_line_27629:5255-6935:773-1544      153   558 (214)  C rep   (0)   416     1  
+
+C PonBla_flattene       558 TCCTCTGATTGGTTGGAGGTGCGGTAA------------TCAGGAGTCAA 521
+                            ?????           v    v     ------------  i   i  vv
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       520 CATCATCAACCTTCTGGTTCCAGCTGGTCTGGGGTCGGCTTGCTTGCAGT 471
+                            v                     i ii          vi v      ii  
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       470 CAACATACAGTTAACATCTTCCACCTGG-TGGAGATTTCATTCTCTGCGA 422
+                              i   ii   i v    i         -   i i i i v i     ii
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       421 AACAGCTCAAGGACGTGGCTCAGAATACTATCTATGGCCCTCGAGGAGGA 372
+                                i     i  ii  vv     v ii   v   iv    i        
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       371 ACTAAAAGTCCTTGACTTTGTTTAATGGCTCAACTAT-------ATTATT 329
+                                i--------    i     v  v   v      -------  ii  
+  rep                   201 ACTAG--------GACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTT 242
+
+C PonBla_flattene       328 ATTTTGTCTTGCTTGACTGTTTTCCTTTTCCTTTGTTTCTCCTTTTTCTC 279
+                             i   -       i     -----                v v  ii   
+  rep                   243 ACTTT-TCTTGCTCGACTG-----CTTTTCCTTTGTTTCTGCATTCCCTC 286
+
+C PonBla_flattene       278 AATTCTCTGATTA-----------AATTTGTTCTTTGGAACTCAGGGGAA 240
+                             v   i  i    ----------- i i  i                i i
+  rep                   287 ACTTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAG 336
+
+C PonBla_flattene       239 GCTTAAGAGGTTAAAG--TTGTCCTACAAACAAGAGACAGGCAGATAACA 192
+                              i  i   ii     --  v i            i  i  -i  ---  
+  rep                   337 GCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGGG-GGA---CA 382
+
+C PonBla_flattene       191 TGGTAGGGGAGGGTAGTCTTT----CTCAGGAAGTCCCCACAG 153
+                            i  -     --------    ---- i i   i v   ?????
+  rep                   383 CGG-AGGGG--------CTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.50 (55 / 22); Gap_init rate = 0.03 (13 / 406), avg. gap size = 4.92 (64 / 13)
+
+2082  8.47 2.61 1.95  PonBla_flattened_line_255261:0-1456:549-1006      152   458 (0)  C rep   (0)   416   108  
+
+C PonBla_flattene       458 TAGTCACCCTCCTTCATCTGGGTGGGGGGGTGGTCTTAGTTTCTGCATAA 409
+                                    v    i  i           -----              v  
+  rep                   108 TAGTCACCATCCTCCACCTGGGTGGGGG-----TCTTAGTTTCTGCAGAA 152
+
+C PonBla_flattene       408 CAACTCA--GATATGCGTAAAATTGTTATGTATATCCCTTGAGCAGGAAC 361
+                                   --         v i                      v      
+  rep                   153 CAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGAAC 202
+
+C PonBla_flattene       360 TACGATTCTGTTTTATCACTGAACTATTATT------ATTACTTTTCTTG 317
+                              v  i           i          i  ------i            
+  rep                   203 TAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCTTG 252
+
+C PonBla_flattene       316 CTTAACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAATA 267
+                              ii                                           i  
+  rep                   253 CTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAGTA 302
+
+C PonBla_flattene       266 ACTGCATGTTCCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAAACTAAAG 217
+                                 v  vvi                               i       
+  rep                   303 ACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAAG 352
+
+C PonBla_flattene       216 CCTTTCTCTACAAACAAGAAACGGGGGGACATGGAGGGCCTTTTGTACTC 167
+                                 i                     -   i      v         i 
+  rep                   353 CCTTTTTCTACAAACAAGAAACGGGGG-ACACGGAGGGGCTTTTGTACCC 401
+
+C PonBla_flattene       166 GAGAAGGCCCTGCAG 152
+                             i  i     ?????
+  rep                   402 GGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.89 (17 / 9); Gap_init rate = 0.01 (4 / 307), avg. gap size = 3.50 (14 / 4)
+
+1799 11.61 24.70 0.89  PonBla_flattened_line_355163:558-2092:773-1336      154   489 (75)  C rep   (0)   416     1  
+
+C PonBla_flattene       489 TCTTCTGATTGGTTAGTGATGAGGTAACAAGGTGATGTCCCCAGAATCT- 441
+                            ?????         i   i          i        ii vi      -
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       440 ------CACCCTTCTGGTTCCAACCAGTCTGAGGTCTAT-TGCTTGTGGT 398
+                            ------  v                      i      i-          
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       397 CAGTATGCAGTCACTATCCTTTACATGGGTGGGGGT---GGT--CTGTAG 353
+                               i   i      i     ii  v           ---i  --   i  
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       352 AACAACTCAAAGATATGCATCAGATTGTTATCTATATCCCTTCAGACGGA 303
+                                              i            v          v  iv   
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       302 ACTAGGA----GTCCTATGACT---CTATTGT------------------ 278
+                                   ----  ii   vi  ---       ------------------
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       277 -----------------------------------------CCTA-TTA- 271
+                            -----------------------------------------    -   -
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       270 --ACTGCTTGAACCTGCTTTTTGGAACTCAGGGAAGGCCTAAGAGACTAA 223
+                            --         ii     i                      i        
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       222 AGCCTTTTTTTCCTACAAACAAGAAACAGGGGACATAGAGGGGCTTTTGT 173
+                                     ---               i       ii             
+  rep                   351 AGCCTTTTT---CTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGT 397
+
+C PonBla_flattene       172 ACTCTGGAGAACCTTGCAG 154
+                              i v    ii  i?????
+  rep                   398 ACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.88 (31 / 8); Gap_init rate = 0.03 (10 / 336), avg. gap size = 8.60 (86 / 10)
+
+1777 14.33 21.93 0.29  PonBla_flattened_line_188400:0-1362:455-1051      149   490 (107)  C rep   (0)   416     1  
+
+C PonBla_flattene       490 TCTTCTGATTAGTTAATGGTGAGGTAACAGGGTGGTGTTTCAAGAATCTT 441
+                            ?????     i   ii                  i      ii       
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       440 ---------------------------------------GTGCT------ 436
+                            ---------------------------------------     ------
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       435 CAGCCTGAAGTTACCATCCTCCACCTGGGTGGGGGCCTTAGTTCCTGTGG 386
+                                v  v   i                       i       i   ii 
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       385 AAGAACTCAAGGACAT-------ATTGTTATGTATAACCCTTGAGGAGGA 343
+                              v       i  i  -------             v             
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       342 GCTAGGACTCTGCTTTATCATTCTACTATTGTTTGA-------------- 307
+                            i           i      ii vv          i --------------
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       306 --------TGCTTTCTCTTTGTTTCTGCATTCCCTCAATTCCATGATTAA 265
+                            --------      ii                     v    v i    i
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       264 TAACTGTTTGAATCTGCCCTTTGGAAATCAGGGAAGGTCTAGGAAGCTGC 215
+                                  i    i     i        v          i      ii  iv
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       214 AGCCTTTTTCCTACCAATAAGAAAGAGAGGACACGGAAAGGCTTTTGTAC 165
+                                      -   v  i      vi i         ii           
+  rep                   351 AGCCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTAC 399
+
+C PonBla_flattene       164 C-AGTAGGGTCCACAGG 149
+                             -i v    i  ?????
+  rep                   400 CCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.77 (36 / 13); Gap_init rate = 0.02 (6 / 342), avg. gap size = 12.67 (76 / 6)
+
+1502 19.74 10.26 3.59  PonBla_flattened_line_616:38416-40095:773-1527      150   539 (216)  C rep   (0)   416     1  
+
+C PonBla_flattene       539 TCTTCTGATTGGCTGGTGGTGAGGTCATCGGGGG-----TCGG----C-- 501
+                            ?????       i            v iv   v -----    ---- --
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       500 -ACCATTGACCTTCAGGTTCCAGTTGGTCTGGGGTCTATGTGCTTGTGGG 452
+                            - i   ii      v       iiii            i          v
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       451 CAGCGGACAGTTAACTTCTCCCGCCTGG-TGGGGGTCTCAGTATCTGCAG 403
+                                ivii   i v v  ii  i     -         i   v       
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       402 AAGAGCTCAAAGGACACGGCTCAGCATAGTATCTACAGCCCTTGAGGAGG 353
+                              v i       - i i vv    vv iv   v  i v            
+  rep                   151 AACAACTCAAAG-ATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       352 AGCTAAAGGCCCTTGGCTTTGTTTAATGGCTAAACTATTATT-------- 311
+                             i   i-------- i  i     v  v   i       i  --------
+  rep                   200 AACTAG--------GACTCTGTTTTATCGCTGAACTATTGTTTAAATCGT 241
+
+C PonBla_flattene       310 -ATTTTGTGTTGTTTGACTG-TTTTCCTTTCTTTCTTCATTTTCTCACTT 263
+                            - i   - v   i i     -         v     v    ii       
+  rep                   242 TACTTT-TCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTT 290
+
+C PonBla_flattene       262 CTCCA------------TTAAATTTGTTCTTTGGAACTGGGGGAAGGCCT 225
+                             i i ------------  i i i  i           vi          
+  rep                   291 CCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCT 340
+
+C PonBla_flattene       224 AAGAGGCTAAAG--TTTTTCTACAAACAAGAGGCAGGTAGAGGACATGGG 177
+                             i   i      --                 ii i  ----     i  i
+  rep                   341 AGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGGG----GGACACGGA 386
+
+C PonBla_flattene       176 AAGG--TCTGT-CCCAGGAAGGTCCCGTAG 150
+                            ii  -- i   -   i   i  i  ?????
+  rep                   387 GGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.35 (54 / 23); Gap_init rate = 0.04 (14 / 390), avg. gap size = 3.86 (54 / 14)
+
+1509 24.12 2.11 4.68  PonBla_flattened_line_170434:1091-2739:756-1540      136   562 (223)  C rep   (0)   416     1  
+
+C PonBla_flattene       562 TTCTCTGATTGGTTGATGGTGAGGTAACAGGGTGGTGTCACAGAGGT--T 515
+                            ?????          i                  i   iv i iii -- 
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       514 AACATCATCAATCCTCAGGCTCCAGCTGGTCTGGGGGGCTATATGTTCAT 465
+                              --       i i  v  i    i ii        v-   ii  i ii 
+  rep                    51 AA--TCATCAACCTTCTGGTTCCAACCAGTCTGGGGT-CTACGTGCTTGT 97
+
+C PonBla_flattene       464 AGCCATCATGCATTTAGC-TCCTCCCATCTGG-TGGGGGTTTTAATATCT 417
+                            i i  v    i v i v -      - i    -       i   i v   
+  rep                    98 GGTCAGCATGTAGTCACCATCCTCC-ACCTGGGTGGGGGTCTTAGTTTCT 146
+
+C PonBla_flattene       416 GTAAAATAACTGAGGAATATGTATCAGACACTGTTATTGATGTCCTTCAG 367
+                             i i  i    v iii     ii     i--      vv  i   i iii
+  rep                   147 GCAGAACAACTCAAAGATATGCGTCAGAT--TGTTATGTATATCCCTTGA 194
+
+C PonBla_flattene       366 GGAAGAACTAAAGATTCTGTGACTGCTTTATGGCTCATCTGTTGTTTAAA 317
+                               i      i-  i     ------     v   v v  i         
+  rep                   195 GGAGGAACTAG-GACTCTGT------TTTATCGCTGAACTATTGTTTAAA 237
+
+C PonBla_flattene       316 TTATTACCAGTTCTCCTGGCCCAATGGTTATTTTTTGGTACTACATGTTC 267
+                             ii    ---  i  i  vi v v  v  v ii    v v  i   vii 
+  rep                   238 TCGTTAC---TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCC 284
+
+C PonBla_flattene       266 TCATTCCTTTAATCATTAATT-CTTGAGCCAGCCTTTTGTGACTCAGGGG 218
+                               i i ii    i v   i -      i v  ii    vi        i
+  rep                   285 TCACTTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGA 334
+
+C PonBla_flattene       217 AGGCCTGGGAGACTAAA--TATTTTCTACAAACAAGAGACAGGTAGAAGA 170
+                                  i          --iv                i  i  ----i  
+  rep                   335 AGGCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGGG----GGA 380
+
+C PonBla_flattene       169 CATTGTGGGAATCTGGT--CTGGGAAGGCCCCATAG 136
+                              iv v   iv i v  -- i    i     ?????
+  rep                   381 CACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.55 (74 / 29); Gap_init rate = 0.03 (14 / 427), avg. gap size = 2.07 (29 / 14)
+
+1334 22.35 4.47 6.59  PonBla_flattened_line_528810:0-1153:254-1041      142   566 (222)  C rep   (0)   416     1  
+
+C PonBla_flattene       566 TCCTCTGACTGATAGATGGTGAGGTAACAGGGTGATGTTGCAAGG--TTT 519
+                            ?????   i  i v i                       v ii i--i  
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       518 AACATTATCAATTCTTAGGCTCCAGCTGATCTGGTGGCTCTGTGTTCCTG 469
+                              -- i     iii iv  i    i iii     v v  vi   i iv  
+  rep                    51 AA--TCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTG 98
+
+C PonBla_flattene       468 GTCATCATGCAGTTAACTTCTTCCATCTGG-TGGGGGTTTTAGCATCTGT 420
+                                v    i   i v v  i    i    -       i    iv    i
+  rep                    99 GTCAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGC 148
+
+C PonBla_flattene       419 ATAACAA------GATGTACACCAGACACTGTTATCTCTGTCCTTCAAGG 376
+                             v     ------   i i ii    i--      v v i   i ii   
+  rep                   149 AGAACAACTCAAAGATATGCGTCAGAT--TGTTATGTATATCCCTTGAGG 196
+
+C PonBla_flattene       375 AGTCACTAAAGATTCTGTGACTCTACTATATGGCTGATCTATTCTATAAA 326
+                              vv    i---------      ii v   v     v     v v    
+  rep                   197 AGGAACTAG---------GACTCTGTTTTATCGCTGAACTATTGTTTAAA 237
+
+C PonBla_flattene       325 TTGTTACCAGTTCTCCTGGCCCAACTGCTATTTTCT--GTTGCTATCAAT 278
+                             i     ---  i  i  - i i      -   i  --   v  ii--  
+  rep                   238 TCGTTAC---TTTTCTTG-CTCGACTGCT-TTTCCTTTGTTTCTGC--AT 280
+
+C PonBla_flattene       277 TCATGTTCACGTTCTTTCAATCATTAATT-CTTGAGCCAGACTTTTGTGA 229
+                              vi--    -   ii -   i v   i -      i v vii    vi 
+  rep                   281 TCCC--TCAC-TTCCCT-AATTAGTAACTGCTTGAGTCTGCTCTTTGGAA 326
+
+C PonBla_flattene       228 CTCAGGGTAGCCCTGGGAGACTAAAGC--TTTTCTACAAACAAGAGGCAG 181
+                                   v  v   i            --                ii i 
+  rep                   327 CTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGG 376
+
+C PonBla_flattene       180 GCAGAAGACATGGGGG----TCTGT-CCTGGGAGGTCCCCATGG 142
+                             ----i    i  i  ---- i   -  i      v   ?????
+  rep                   377 G----GGACACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.17 (65 / 30); Gap_init rate = 0.04 (19 / 425), avg. gap size = 2.47 (47 / 19)
+
+1080 20.36 11.08 7.22  PonBla_flattened_line_138140:0-1119:212-953      139   526 (216)  C rep   (13)   403     1  
+
+C PonBla_flattene       526 ATGCGTAATTCTCAGGTTGGTTG----GCATCAAGGTTAAGTTTTGAG-- 483
+                            ????? i   ----       v ---- i v  i   v v    i i --
+  rep                     1 ZZZZZTGATT----GGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAA 46
+
+C PonBla_flattene       482 -C---ATCACCAACCTTCTGGTTTCAACCAGTCTGAAGTATACATGCTTG 437
+                            - ---    i             i           ii  v   i      
+  rep                    47 TCTTAATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTG 96
+
+C PonBla_flattene       436 TGGTCAGCA----GTT-------TTCATCTGG-TGGGGGTCT--GCTTCC 401
+                                     ----  i------- i  i    -         -- i   -
+  rep                    97 TGGTCAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTC- 145
+
+C PonBla_flattene       400 TGTATAAACAATGTAGGAATGTGTGTCAGGCC----TGTATCTCCATCTT 355
+                              i -i     ivi iii  i  i     iii----     v   ---i 
+  rep                   146 TGCA-GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCC---CT 191
+
+C PonBla_flattene       354 TCAGG--GAACTAGGAGTTCAGTGATTCTGCGATGTGGTAGATTTATAGT 307
+                             v   --         ---------i    ivv i v iv  vi   v  
+  rep                   192 TGAGGAGGAACTAGGA---------CTCTGTTTTATCGCTGAACTATTGT 232
+
+C PonBla_flattene       306 CTAAATTGTTACCAGTTTCCTGGCCCAACAAGTATTT-TTTGTTTATATA 258
+                            i     i     ---   i  v  i i  viv v  i-       v ii 
+  rep                   233 TTAAATCGTTAC---TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCA 279
+
+C PonBla_flattene       257 T--CTTCACATTTCCTAATCATTAACT-CTTGAGCCAGCCTTTCGAGACT 211
+                             -- i    -  i      i v     -      i v  ii  i ii   
+  rep                   280 TTCCCTCAC-TTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACT 328
+
+C PonBla_flattene       210 CAGGGGAGGCCTGGGAGACTAAAGCAAAACCCTTTTACTTCAAA--GGAC 163
+                                 i      i            ------     v  v    --i  v
+  rep                   329 CAGGGAAGGCCTAGGAGACTAAAGC------CTTTTTCTACAAACAAGAA 372
+
+C PonBla_flattene       162 A---GGGACAC--AGGGGCTT--GTATGCGG 139
+                             ---       --        --   iv   
+  rep                   373 ACGGGGGACACGGAGGGGCTTTTGTACCCGG 403
+
+Transitions / transversions = 2.16 (54 / 25); Gap_init rate = 0.06 (24 / 388), avg. gap size = 2.96 (71 / 24)
+
+1392 17.35 23.82 1.47  PonBla_flattened_line_74855:0-919:12-572      151   490 (71)  C rep   (0)   416     1  
+
+C PonBla_flattene       490 TCTTCTGATTGGTTGGTGGTGAGGTAACAGGGTGGCACTCCAGGAATCTT 441
+                            ?????                             iiii i i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       440 GA---------------------------------------GCT------ 436
+                            i ---------------------------------------   ------
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       435 CAGCTTGAAGTTACTATCTTCCACCTGGGTGGGGACCTTAGTT-CTGCAG 387
+                                v  v   i  i   i               ii       -      
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       386 AAGAGCTCAAAGATAT---------TGTTGTGTATATTCCTTGTGGAGGA 346
+                              v i           ---------    i       i     v      
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGGA 200
+
+C PonBla_flattene       345 GCCGGGACCCTGCCCCAAGGCTGCAGTATTGTTT---------------- 312
+                            i ii    i   iiii vv    v v        ----------------
+  rep                   201 ACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTCT 250
+
+C PonBla_flattene       311 --CTTGACTGCTCCTCCCTTGTCTCTGCATCCCCTCCCTTCCCTGATTAG 264
+                            --  i       ii   i    i       i     v       i     
+  rep                   251 TGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAG 300
+
+C PonBla_flattene       263 CAACTGTTTGAATCTACCCTTTGGAACTCAGGGAAGGTTAAGGAGGCTGA 214
+                            i     i    i   i i                   iiv     i  i 
+  rep                   301 TAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAA 350
+
+C PonBla_flattene       213 ATGAAGCATATTTCCTACAAA--ATA---GGGGGACCCGGAAAAGATTT- 170
+                             ----  v -   i       -- v ---       v    iii v   -
+  rep                   351 A----GCCT-TTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTT 395
+
+C PonBla_flattene       169 GTACCCAGGAG--CTCCACAG 151
+                                  i    -- i ?????
+  rep                   396 GTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.21 (45 / 14); Gap_init rate = 0.03 (11 / 340), avg. gap size = 7.82 (86 / 11)
+
+1053 21.77 10.75 5.11  PonBla_flattened_line_63199:0-1670:767-1502      141   512 (224)  C rep   (23)   393     1  
+
+C PonBla_flattene       512 ATCTCGGATCGGTTGGC--------ATCAAGGTAAAGTTTCAAG---C-- 476
+                            ?????v   i      i-------- v  i   i v     ii --- --
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       475 -ATCATCAACTTTCTGGTTTCAACCAGTCTGGGGTCTACGTTCTTGCGGT 427
+                            -         i        i                     v    i   
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       426 CAG----TGGTT-------TTCATCTGG-TAGGGGTCT--GTTTCCTGTG 391
+                               ---- i  i------- i  i    - i       --     -  i-
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTC-TGC- 148
+
+C PonBla_flattene       390 AAAACAACTTAGAAGTGAGTGTCAGGCCTTCATCTGTATCTCTCAGGGAA 341
+                             i       i i ii iv i     iiiv i  v i    i  iii   -
+  rep                   149 AGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGA- 197
+
+C PonBla_flattene       340 CTGGGAGTTTGGTGATTCTGCGGTGTGGCGTATTTATAGTCTAAATTGTT 291
+                            ---   ii v  -- i    ivv i v  vv vi   v  i     i   
+  rep                   198 ---GGAACTAGG--ACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTT 242
+
+C PonBla_flattene       290 ACCAGTTTCTCAGCCCAACAGCTCTTC-TTTGTTTCTACCT--CTTCACC 244
+                              i--     i-  i i  v   i   -         i v -- i    -
+  rep                   243 ACT--TTTCTT-GCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC- 288
+
+C PonBla_flattene       243 TTTTCTAATCATTAG-TGATTGAGTCAGC-CTTCAGAGACTCAAGGGAGG 196
+                              ii     i v  i-  v       v  -   ii  -     i  i   
+  rep                   289 TTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGA-ACTCAGGGAAGG 337
+
+C PonBla_flattene       195 CCTGGGACACTAAAGCAAAAGCCTTTTCCTTCAAA--GGACA---GGGAC 151
+                               i   v        ------     i  v    --i  v ---     
+  rep                   338 CCTAGGAGACTAAAGC------CTTTTTCTACAAACAAGAAACGGGGGAC 381
+
+C PonBla_flattene       150 AC--AGGGCCTT 141
+                              --    v   
+  rep                   382 ACGGAGGGGCTT 393
+
+Transitions / transversions = 2.38 (57 / 24); Gap_init rate = 0.06 (23 / 372), avg. gap size = 2.57 (59 / 23)
+
+2372 13.83 2.43 1.46  PonBla_flattened_line_54026:1135-2813:1121-1602       16   427 (55)  C rep   (0)   416     1  
+
+C PonBla_flattene       427 TCTTCTGATTGGCTGGTGGTGAGGTAGCAGGGTGATATTTCAGGAATCTT 378
+                            ?????       i             i         i    i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       377 TATCACCAGTCTTCTGGTTCCAACCAGTCTGGGCTCTACACG----TGGT 332
+                            v    i  ii                       v     ii ----    
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       331 CATTGTGTAGTCACCATCCTTTACCAGGTGTGGGGTGGTCTTAATTTCTG 282
+                              vii               ii   v  -      --      i      
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGG-GTGGGG--GTCTTAGTTTCTG 147
+
+C PonBla_flattene       281 CAGAACAACTCTAAGATATGCAACAGATTGTTATCTATAGCCCTTGTGGA 232
+                                       v         iv           v    v      v   
+  rep                   148 CAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGA 197
+
+C PonBla_flattene       231 GGAACTAGGACTCTGTTTTATCACTGAACTGTTGTTTAAGCTACCATTAC 182
+                                                  i       i        --- i i    
+  rep                   198 GGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA---ATCGTTAC 244
+
+C PonBla_flattene       181 TTTTCTTGATTGACTGCTTTTCCTTTGTTTCTGCACTCCCTCACTTCTCA 132
+                                    v i                        i           i v
+  rep                   245 TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCT 294
+
+C PonBla_flattene       131 TATTA----CTTCTTCTGCCTGCTCTTTGAAACTTGGGGAAGGTCTAGGA 86
+                            v    ----  v   vv i          i    ii       i      
+  rep                   295 AATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGA 344
+
+C PonBla_flattene        85 GACTGAAG-TTTTTTCTACAAGAAAGAAGTGGGGGACACAGTGGGG-TCT 38
+                                i   -i           iv     ii         i v    - i 
+  rep                   345 GACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTT 394
+
+C PonBla_flattene        37 TGTCATGAGGAAGGCCCTACAG 16
+                               vvivi   i     ?????
+  rep                   395 TGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.85 (37 / 20); Gap_init rate = 0.02 (7 / 412), avg. gap size = 2.29 (16 / 7)
+
+ 989 21.15 10.99 7.69  PonBla_flattened_line_297333:0-1183:276-1016      142   505 (236)  C rep   (18)   398    23  
+
+C PonBla_flattene       505 GGCATCAAAGTGAAGTTTCAAG---C---ATCATCAGCCTTCTGGTTTCA 462
+                              i v  ii    v     ii --- ---       i          i  
+  rep                    23 GGTAACAGGGTGATGTTTCGGGAATCTTAATCATCAACCTTCTGGTTCCA 72
+
+C PonBla_flattene       461 ACCAGTCTGGGGTCTACCTGCTTGCAGTCAGTTT----------TCCTCT 422
+                                             v      ii     iv ----------     i
+  rep                    73 ACCAGTCTGGGGTCTACGTGCTTGTGGTCAGCATGTAGTCACCATCCTCC 122
+
+C PonBla_flattene       421 -----GGTGGG---CTCTGCTTCCTATACA-AACAGCTTAGGAATGTGTG 381
+                            -----      ---  iv i   --- i  -    i  i iii  i  i 
+  rep                   123 ACCTGGGTGGGGGTCTTAGTTTC---TGCAGAACAACTCAAAGATATGCG 169
+
+C PonBla_flattene       380 TCACGCCTGTATCTGTATTTTTC---AGG--GAACTGCAGGTTCGGTGAC 336
+                               - vi   - v     v ii ---   --     --   -------  
+  rep                   170 TCA-GATTGT-TATGTATATCCCTTGAGGAGGAACT--AGG-------AC 208
+
+C PonBla_flattene       335 TCTGCTATGTGGCCAACTTAGAGTCTGAATTGTTACCAGTTTCCTGGCCC 286
+                                i v i v  ii vi  vv  i i   i     ---   i  v  i 
+  rep                   209 TCTGTTTTATCGCTGAACTATTGTTTAAATCGTTAC---TTTTCTTGCTC 255
+
+C PonBla_flattene       285 AACAGCCATTC-TTTGTTTCTACGT--CTTCACATTTCCTCATCATTAAC 239
+                            i  v  iv   -         i i -- i    -  i   v  i v    
+  rep                   256 GACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC-TTCCCTAATTAGTAAC 304
+
+C PonBla_flattene       238 TCTTTGAGTCAGCCTTTTGAGACTCAAGGGAGACCTGGGAGACTGAGGCA 189
+                             vi       v  ii    ii     i  i  i   i       ------
+  rep                   305 TGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACT------ 348
+
+C PonBla_flattene       188 AAGAAAGGCCTTTTACTTCAAA----GGACAGGGG-CACGG--GGGCTTG 146
+                            ----  i       v  v    ----ii  i    -     --      v
+  rep                   349 ----AAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTTT 394
+
+C PonBla_flattene       145 TGTA 142
+                                
+  rep                   395 TGTA 398
+
+Transitions / transversions = 2.35 (54 / 23); Gap_init rate = 0.06 (21 / 364), avg. gap size = 3.24 (68 / 21)
+
+1157 21.57 8.96 5.04  PonBla_flattened_line_12150:9180-10860:773-1498      139   495 (231)  C rep   (23)   393    23  
+
+C PonBla_flattene       495 GGCATCAAGGTGAAGTTTCAAG---C---ATCATCAACCTTCTGGTTTCA 452
+                              i v  i     v     ii --- ---                  i  
+  rep                    23 GGTAACAGGGTGATGTTTCGGGAATCTTAATCATCAACCTTCTGGTTCCA 72
+
+C PonBla_flattene       451 ACCAGTCTGGGGTCTATGTGCCTGCAGTCAGCA----GTT-------TCC 413
+                                            i    i  ii       ----  i-------   
+  rep                    73 ACCAGTCTGGGGTCTACGTGCTTGTGGTCAGCATGTAGTCACCATCCTCC 122
+
+C PonBla_flattene       412 ATCTGG-TGGGG-TCT--GCTTCCTGTAAAAACAACTTAGGAACGTGTGT 367
+                             i    -     -   -- i   -  i i  -     i iii ii  i  
+  rep                   123 ACCTGGGTGGGGGTCTTAGTTTC-TGCAGAA-CAACTCAAAGATATGCGT 170
+
+C PonBla_flattene       366 CAAGCCTTTGTCTGTATCTTTCAGGGAACTGGGAGTTCAGTGGTTCTGCT 317
+                              iiiiv  i v i    ii iii   ----   ii -  - ii    i 
+  rep                   171 CAGATTGTTATGTATATCCCTTGAGGA----GGAACT-AG-GACTCTGTT 214
+
+C PonBla_flattene       316 GTGTGGTGGATTTATAGTCTAAATTGTTACCAGTTTTCTAGCCCAACAGC 267
+                            v i v iv  vi   v  i     i     ---      v  i i  v  
+  rep                   215 TTATCGCTGAACTATTGTTTAAATCGTTAC---TTTTCTTGCTCGACTGC 261
+
+C PonBla_flattene       266 TGC-CCTTTGTTTCTACAT--CTTCACATTTCCTAATCATTAACT-CTTG 221
+                             vi-           i   -- i    -  i      i v     -    
+  rep                   262 TTTTCCTTTGTTTCTGCATTCCCTCAC-TTCCCTAATTAGTAACTGCTTG 310
+
+C PonBla_flattene       220 AGCCAGCCTTTTGAGACTCAAGGGAGGCCTGGGAGACTAAATCAAAAGCC 171
+                              i v  ii    ii     i  i      i          ------   
+  rep                   311 AGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAA------GCC 354
+
+C PonBla_flattene       170 TTTGGCTTCAAA--GGACA---GGGACAC--AGGGGTTT 139
+                               vv  v    --i  v ---       --     i  
+  rep                   355 TTTTTCTACAAACAAGAAACGGGGGACACGGAGGGGCTT 393
+
+Transitions / transversions = 3.28 (59 / 18); Gap_init rate = 0.06 (21 / 357), avg. gap size = 2.38 (50 / 21)
+
+1700  6.92 7.12 27.12  PonBla_flattened_line_156375:780-2463:773-1492      154   673 (47)  C rep   (0)   416     1  
+
+C PonBla_flattene       673 TCTTCTGATTAGTTGGTGGT-----AACAGGGTGATGTTTTGGAAATCTT 629
+                            ?????     i         -----               i  i      
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       628 AATCATCAGCC--------------AGTCTGGGGGCTCCGTGCTTGTGAA 593
+                                    i  --------------         v  v          iv
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       592 CTACATGTAGTCACCAAACTCCACCTGGGTATGGGTCTTAGTTTTCTGCA 543
+                             vi             vv            iv            -     
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTT-CTGCA 149
+
+C PonBla_flattene       542 GACTAACTCAAAGGTATGCATCAGATTGTTATCTATATCCCTTGAGGAAG 493
+                              vi         i     i            v               i 
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       492 A-------CTCTGTTTTACCGCTGAACTATTGTTTAAGTCATGATTGGGA 450
+                             -------          i                  -------------
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAA------------- 236
+
+C PonBla_flattene       449 ATTCCCTGGCGGTCCAGCGGTTAGGACTCCACGCTTTCGCTGCGGAGGGT 400
+                            --------------------------------------------------
+  rep                   237 -------------------------------------------------- 236
+
+C PonBla_flattene       399 GTGGGTTCGGTCCCTGGTCAGGGAACTAAGATCCCACGAGCCATGTGGTG 350
+                            --------------------------------------------------
+  rep                   237 -------------------------------------------------- 236
+
+C PonBla_flattene       349 CAGCCAAAAAAAAAAAAAAAAAAAGCCATCATTACTTTTCTTGCTTAACT 300
+                            ---------------------------   i              ii   
+  rep                   237 ---------------------------ATCGTTACTTTTCTTGCTCGACT 259
+
+C PonBla_flattene       299 GCTTTTCCTTTGTTTCTGCATTCCCTCTTTTTTCTAATTAGTAACTG-TT 251
+                                                       vi  ii              -  
+  rep                   260 GCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAGTAACTGCTT 309
+
+C PonBla_flattene       250 GAGTCTGCTCTT-------CAG--AAGACCTAGGAGACTAAAGCCTTCTT 210
+                                        -------   --   i                   i  
+  rep                   310 GAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTT 359
+
+C PonBla_flattene       209 CTACAAACAAGAACCAGGGG-CACAGAGGGGCTTTTGTACCCAGGAAGGT 161
+                                         v i    -   i                 i   i  i
+  rep                   360 CTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTACCCGGGAGGGC 409
+
+C PonBla_flattene       160 CCTGCAG 154
+                              ?????
+  rep                   410 CCZZZZZ 416
+
+Transitions / transversions = 2.27 (25 / 11); Gap_init rate = 0.02 (9 / 520), avg. gap size = 19.78 (178 / 9)
+
+1567 17.52 12.10 0.32  PonBla_flattened_line_95144:999-2679:773-1236      151   464 (0)  C rep   (0)   416    66  
+
+C PonBla_flattene       464 GGTTCTGACCAGCCTGGGTTCT-------------TAGCTAGTAGTTACC 428
+                                 ii     i     v   -------------i   vv     i   
+  rep                    66 GGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGTCAGCATGTAGTCACC 115
+
+C PonBla_flattene       427 ATCCTCCACCTAGGTTGGGGCCTTAGTTCCAGTAGAAGAACTCTAAGATA 378
+                                       i   v    i       i v i    v     v      
+  rep                   116 ATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAGAACAACTCAAAGATA 165
+
+C PonBla_flattene       377 --CAGTATATTGTTATGTGTATCCCCTGAGGGGAAACTAGGATTCCGCTT 330
+                            -- ivi v          i      i     i i        i  i i  
+  rep                   166 TGCGTCAGATTGTTATGTATATCCCTTGAGGAGGAACTAGGACTCTGTTT 215
+
+C PonBla_flattene       329 TTTCGCTG--CT----------CCGTTGTTTT---------ACTGCTTTT 301
+                             v      --  ----------i    ii   ---------         
+  rep                   216 TATCGCTGAACTATTGTTTAAATCGTTACTTTTCTTGCTCGACTGCTTTT 265
+
+C PonBla_flattene       300 CCTTTGTTTGTGTATGCCCTCACTTTTCTGATGAGTAACTGTTTGAATCT 251
+                                     v  i  v         ii  i  v        i    i   
+  rep                   266 CCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAGTAACTGCTTGAGTCT 315
+
+C PonBla_flattene       250 GCCCTTTGGAACTCAGGGAAGGTCTAGGGGGCTAA-GCCTTTTTCCTACA 202
+                              i                   i     i i    -         -    
+  rep                   316 GCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAAGCCTTTTTC-TACA 364
+
+C PonBla_flattene       201 AATGAGAAACAAGGAA-ATAGAAAGTCTTTTGTACCTGGGAGGGCCCTGC 153
+                              ii      ii  i - ii  ii v          i          ???
+  rep                   365 AACAAGAAACGGGGGACACGGAGGGGCTTTTGTACCCGGGAGGGCCCZZZ 414
+
+C PonBla_flattene       152 GG 151
+                            ??
+  rep                   415 ZZ 416
+
+Transitions / transversions = 2.93 (41 / 14); Gap_init rate = 0.03 (8 / 314), avg. gap size = 4.88 (39 / 8)
+
+1270  7.96 0.50 5.47  PonBla_flattened_line_383488:0-1491:850-1267        1   201 (217)  C rep   (225)   191     1  
+
+C PonBla_flattene       201 TCTTCTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCAGGAATCTT 152
+                            ?????                                    i        
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       151 AATCATCAACTTTCTGGTTCCAGCCAGTCTGGAGTCTA-GTGCTTGTGCT 103
+                                      i           i         i     -         v 
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       102 CAGCAAGAAGTCACCATCCTCCATCTGGTGGGGGTGGGGTCCTTAGCTCC 53
+                                 v v               i    -----      vi     i i 
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGG-----GTGGGGGTCTTAGTTTC 145
+
+C PonBla_flattene        52 TGCAGAACAGCTCAAAGCTGTTCAGATGTATCAGATTGTTATGTATATCC 3
+                                     i       ------ v   ii                    
+  rep                   146 TGCAGAACAACTCAAAG------ATATGCGTCAGATTGTTATGTATATCC 189
+
+C PonBla_flattene         2 CT 1
+                              
+  rep                   190 CT 191
+
+Transitions / transversions = 2.20 (11 / 5); Gap_init rate = 0.01 (3 / 201), avg. gap size = 4.00 (12 / 3)
+
+1265  9.63 2.14 0.00  PonBla_flattened_line_139174:1323-3001:1035-1434        1   187 (213)  C rep   (225)   191     1  
+
+C PonBla_flattene       187 TCTTCTGATTGATTGGTGGTGAGGTAACAGGGTGATGTGTTGGGAATCTC 138
+                            ?????      i                          v i        i
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       137 CATCATCAACCT---GGTTCCAACCAGTCTGGGGTCTCCATGCTTGTGGT 91
+                            v           ---                      v i          
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene        90 CAGCAAGTAGTCATCGTCTTCCACC-GCGTAGGGGTCTTAGTTTCTGCAG 42
+                                 v       i i  i      - v  i                   
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene        41 AACAACTCAAAGATAGGCATCAGGTTGTTATCCATATCCCT 1
+                                           v  i    i       vi        
+  rep                   151 AACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCT 191
+
+Transitions / transversions = 1.57 (11 / 7); Gap_init rate = 0.01 (2 / 187), avg. gap size = 2.00 (4 / 2)
+
+1175 13.33 0.00 0.56  PonBla_flattened_line_15345:13314-14994:775-1101      148   327 (0)  C rep   (0)   416   238  
+
+C PonBla_flattene       327 TCATTACTTTTTGTGTTTAACTGCTTCTCCTTTCTCTCTGCACTGCCTCA 278
+                              i        iv  i ii       i      v i      i v     
+  rep                   238 TCGTTACTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCA 287
+
+C PonBla_flattene       277 CTTCCCTACTTAGTAACTGCATGAGCCTGCTCTTTGGAACTCAGGGAAGG 228
+                                    v           v    i                        
+  rep                   288 CTTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGG 337
+
+C PonBla_flattene       227 ACTAGGAAACTAAAGCCTTTTTCTACAAACAAGAAACTGGGGGGCACAGA 178
+                            v      i                             -     i   i  
+  rep                   338 CCTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAAC-GGGGGACACGGA 386
+
+C PonBla_flattene       177 GGGACTTTTGTACCCAAGAAGGTACAAAAG 148
+                               i           ii  i  iv ?????
+  rep                   387 GGGGCTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 2.43 (17 / 7); Gap_init rate = 0.01 (1 / 180), avg. gap size = 1.00 (1 / 1)
+
+1187  9.24 28.51 4.02  PonBla_flattened_line_300438:186-1866:775-1172      150   398 (0)  C rep   (0)   416   107  
+
+C PonBla_flattene       398 GTAGTCATCATCCTCCACCTAGTTGGGGTAGGGGGGTCTTAGTTTCTACA 349
+                                   i            -----    --                i  
+  rep                   107 GTAGTCACCATCCTCCACCT-----GGGT--GGGGGTCTTAGTTTCTGCA 149
+
+C PonBla_flattene       348 GAACGATTCAAAGATATGCATCAGATTGTTATATATATCCCTTCAGGAAG 299
+                                i i            i            i          v    i 
+  rep                   150 GAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAGG 199
+
+C PonBla_flattene       298 ATTTAGGAGTC----------CTG-------------------------- 285
+                             vi     v  ----------   --------------------------
+  rep                   200 AACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTACTTTTC 249
+
+C PonBla_flattene       284 -----TGAC-------CCTATTGT-------------------CCTAATT 266
+                            -----i   -------   -    -------------------       
+  rep                   250 TTGCTCGACTGCTTTTCCT-TTGTTTCTGCATTCCCTCACTTCCCTAATT 298
+
+C PonBla_flattene       265 ATTAACTTCTTGAGTCTGCTCTCTGGAACGCACGGAAGGCCTAGGAGACT 216
+                             v     v              i      v  v                 
+  rep                   299 AGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACT 348
+
+C PonBla_flattene       215 AAAGCTCTTTTCTCTACAAACAAGAAACAGGGAACA--GAGGGGTTTTT- 169
+                                 -     -                i   i   --      i    -
+  rep                   349 AAAGC-CTTTT-TCTACAAACAAGAAACGGGGGACACGGAGGGGCTTTTG 396
+
+C PonBla_flattene       168 -ACCTGGGAAGGACCCCCAG 150
+                            -   i    i  v  ?????
+  rep                   397 TACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 1.88 (15 / 8); Gap_init rate = 0.04 (11 / 249), avg. gap size = 7.36 (81 / 11)
+
+1108 14.45 0.00 0.58  PonBla_flattened_line_238525:0-1584:680-1001      150   322 (0)  C rep   (0)   416   245  
+
+C PonBla_flattene       322 TTTTCTTTTTCAACTGCTTTTTCTTTGTTTCTGCATTCCCTCATTTCCTT 273
+                                   vi  i         i                     i    i 
+  rep                   245 TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCT 294
+
+C PonBla_flattene       272 AACTAGTAGTTGCTTAAGTCTGCTCTTTGGAACTTGTGGAAGACCTAGGA 223
+                              i     ii     i                  iiv     i       
+  rep                   295 AATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGA 344
+
+C PonBla_flattene       222 GACTAAAGTCTTTTTCCTACAACCAAGAAATAGGGGATACAGAGGGGATT 173
+                                    i       -     v       ii     i  i      v  
+  rep                   345 GACTAAAGCCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGGCTT 393
+
+C PonBla_flattene       172 TTGTTCCTGGAAAGGCCCTGAAG 150
+                                v  i  i i     ?????
+  rep                   394 TTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 4.00 (20 / 5); Gap_init rate = 0.01 (1 / 173), avg. gap size = 1.00 (1 / 1)
+
+ 974 15.95 1.23 0.61  PonBla_flattened_line_617096:263-1387:773-1085      151   313 (0)  C rep   (0)   416   253  
+
+C PonBla_flattene       313 CTTGATTGTTCCTCCTTTGTTTCTGCATTACCTTACTTCCCTGATTAGCA 264
+                              i  i  i ii                 v   i        i     i 
+  rep                   253 CTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCCCTAATTAGTA 302
+
+C PonBla_flattene       263 ACTCTTTGAATCTGCTCTTTGGTATTCAGG-AATGTCTAGGAGGCTGAAG 215
+                               vi    i            v i     -  v i       i  i   
+  rep                   303 ACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAGGAGACTAAAG 352
+
+C PonBla_flattene       214 CCTTTTTCCTGCAAATAAGAAACAGGGGACACAGAAAGACTTT-GTACCC 166
+                                    - i    i       i        i  ii i    -      
+  rep                   353 CCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGGCTTTTGTACCC 401
+
+C PonBla_flattene       165 AGGAGGGCCCCACAG 151
+                            i         ?????
+  rep                   402 GGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 5.50 (22 / 4); Gap_init rate = 0.02 (3 / 163), avg. gap size = 1.00 (3 / 3)
+
+1798 10.08 3.88 0.00  PonBla_flattened_line_97928:1943-3623:1423-1680        1   258 (0)  C rep   (10)   406   139  
+
+C PonBla_flattene       258 TAGTTCCTGAAGAATAACTCAAAGATAT----CAGATTGTTATATATATC 213
+                                 i   v    i             ----           i      
+  rep                   139 TAGTTTCTGCAGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATC 188
+
+C PonBla_flattene       212 CATTGAGGAGGAACTAGGACTCTGTTTTATCACTGAACTTTTGT------ 169
+                             v                             i       v    ------
+  rep                   189 CCTTGAGGAGGAACTAGGACTCTGTTTTATCGCTGAACTATTGTTTAAAT 238
+
+C PonBla_flattene       168 CATTACTTTTTTTGTTTAATTGCTTTTCCTTTGTTTCTGCATTCCCTCAC 119
+                             i        i   i ii i                              
+  rep                   239 CGTTACTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC 288
+
+C PonBla_flattene       118 TTCTCTAATTAGTAACTACCTGTGCCTGATCTTTGGAACTCAGGGAAGGC 69
+                               i             i i  v i   v                     
+  rep                   289 TTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGC 338
+
+C PonBla_flattene        68 CTAGGAGACTAAAGCCTTTTTATACAAACAAGAAACAGGGGACATGGAGG 19
+                                                 v              i       i     
+  rep                   339 CTAGGAGACTAAAGCCTTTTTCTACAAACAAGAAACGGGGGACACGGAGG 388
+
+C PonBla_flattene        18 GGCTTTGGTACTTGAGAG 1
+                                  v    ii i   
+  rep                   389 GGCTTTTGTACCCGGGAG 406
+
+Transitions / transversions = 2.71 (19 / 7); Gap_init rate = 0.01 (2 / 258), avg. gap size = 5.00 (10 / 2)
+
+1151 21.01 11.17 5.05  PonBla_flattened_line_55449:4927-6608:774-1356      142   517 (66)  C rep   (17)   399     1  
+
+C PonBla_flattene       517 TCCTCGGATTGGTTGGC--------ATCAAGGTGAAGTTTCAAG---CTT 479
+                            ?????v          i-------- v  i     v     ii ---   
+  rep                     1 ZZZZZTGATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTT 50
+
+C PonBla_flattene       478 ---CATCAGCCTTCTGGTTTCAACCAGTCCGGGACCTATGTGCTTGTGGT 432
+                            ---     i          i         i   ii   i           
+  rep                    51 AATCATCAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGT 100
+
+C PonBla_flattene       431 CA------------CAGTTTTCATCTGG-TAGGGGC--TGCTTCCTGTAA 397
+                              ------------  vii i  i    - i    i-- iv  i   i i
+  rep                   101 CAGCATGTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTCTGCAG 150
+
+C PonBla_flattene       396 AAACAACTTAGGAATGTGTGTCAGGTGTTTATCTATATCTTTCAAGGAAC 347
+                              -     i iii  i  i     i vv    v      ii ii    --
+  rep                   151 AA-CAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGA-- 197
+
+C PonBla_flattene       346 TGGGAGTTTGGTGATTCTGCGATAT-GTTGGATTTATAGTCTATATTGTT 298
+                            --   ii v  -- i    ivv   - i  i i -  v  i  v  i   
+  rep                   198 --GGAACTAGG--ACTCTGTTTTATCGCTGAACT-ATTGTTTAAATCGTT 242
+
+C PonBla_flattene       297 ACCAGTTTCCTGGCCCAACAGCTATTC-TTTGTTTCTGCCT--CTTCACA 251
+                              ---   i  v  i i  v   v   -           v -- i    -
+  rep                   243 AC---TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC- 288
+
+C PonBla_flattene       250 TTTCATAATCATTAACT-CTTGAGCCAGC-CTTTGGAGACTCAAGGGAGG 203
+                              i v    i v     -      i v  -       -     i  i   
+  rep                   289 TTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGA-ACTCAGGGAAGG 337
+
+C PonBla_flattene       202 CCTGGAAGACTAAAGCAAAAGCCTTTTACTTCAAAGGACAGAC-----AC 158
+                               i i          ------     v  v    vi v i  -----  
+  rep                   338 CCTAGGAGACTAAAGC------CTTTTTCTACAAACAAGAAACGGGGGAC 381
+
+C PonBla_flattene       157 ACGG--GGGCTTGTATAC 142
+                                --      v i   
+  rep                   382 ACGGAGGGGCTTTTGTAC 399
+
+Transitions / transversions = 2.16 (54 / 25); Gap_init rate = 0.06 (21 / 376), avg. gap size = 2.90 (61 / 21)
+
+ 694 23.11 5.98 6.37  PonBla_flattened_line_108670:0-1173:772-1163      142   392 (0)  C rep   (18)   398   149  
+
+C PonBla_flattene       392 AAAACAACTTAGGAATGTGTGTCAGGCCTTTATCTGTATCT-TTCAGG-- 346
+                             i       i iii  i  i     iiiv    v i    i-  v   --
+  rep                   149 AGAACAACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAG 198
+
+C PonBla_flattene       345 GAACTGGGAGTTCGATGATTCTATGTGGTGGATTTATAGTCTAAATTGTT 296
+                                 i   v ii ----  i   -i v  i i -  v  i     i   
+  rep                   199 GAACTAGGACTCTG----TTTTAT-CGCTGAACT-ATTGTTTAAATCGTT 242
+
+C PonBla_flattene       295 ACCGCTTTCCCAGCCCAACAGATATTC-TTTGTTTTTACA--CCTTCACA 249
+                              ---   i iv  i i  v v v   -       i i  --  i    -
+  rep                   243 AC---TTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC- 288
+
+C PonBla_flattene       248 TTTCCTAATTATTAACT-CTTGAG-CAGCCTTTTGAGACTCAAGTGAGGC 201
+                              i        v     -      - v  ii    ii     i vi    
+  rep                   289 TTCCCTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGC 338
+
+C PonBla_flattene       200 CTGGGAGACTAAAGCAGAAGTCTTTTACTTCAAA---GGACTAGG--ACA 156
+                              i            ------     v  v    --- i vii  --   
+  rep                   339 CTAGGAGACTAAAGC------CTTTTTCTACAAACAAGAAACGGGGGACA 382
+
+C PonBla_flattene       155 C--AGGGACTTGTATA 142
+                             --    i   v i  
+  rep                   383 CGGAGGGGCTTTTGTA 398
+
+Transitions / transversions = 2.41 (41 / 17); Gap_init rate = 0.06 (15 / 251), avg. gap size = 2.07 (31 / 15)
+
+1135 13.07 0.00 1.14  PonBla_flattened_line_289245:239-1914:1097-1309       38   213 (0)  C rep   (0)   416   243  
+
+C PonBla_flattene       213 ACTATTGTTTCTTGACTGCCTTTCCTTTGTTTCTGCATTCCCTCACTCCT 164
+                               v  v  v  i      i                           i i
+  rep                   243 ACTTTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCACTTCC 292
+
+C PonBla_flattene       163 CTAATTAGTAGCTGTTTGAATCTGCCCTTTGGAACTCAGGGACGGTCTAA 114
+                                      i   i    i     i                v  i   i
+  rep                   293 CTAATTAGTAACTGCTTGAGTCTGCTCTTTGGAACTCAGGGAAGGCCTAG 342
+
+C PonBla_flattene       113 GAGGCTGAAAGCCTTTTTCCTACAAATAAGAAACGGGGGACACAGAAAGA 64
+                               i  -            -      i                i  ii i
+  rep                   343 GAGACT-AAAGCCTTTTTC-TACAAACAAGAAACGGGGGACACGGAGGGG 390
+
+C PonBla_flattene        63 CTTTTGGACCCAGGAGGACCCTGAGG 38
+                                  v    i     i   ?????
+  rep                   391 CTTTTGTACCCGGGAGGGCCCZZZZZ 416
+
+Transitions / transversions = 3.60 (18 / 5); Gap_init rate = 0.01 (2 / 176), avg. gap size = 1.00 (2 / 2)
+
+ 802 25.08 11.19 4.07  PonBla_flattened_line_706023:0-1123:642-1123        1   295 (187)  C rep   (94)   322     7  
+
+C PonBla_flattene       295 GATTGGTTGGC--------ATCAAGGTGAAGTTTCAAG---C---ATCAT 260
+                                      i-------- v  i     v     ii --- ---     
+  rep                     7 GATTGGTTGGTGGTGAGGTAACAGGGTGATGTTTCGGGAATCTTAATCAT 56
+
+C PonBla_flattene       259 CAACCTTCTAGTTTCAACTAGTCTAGGGTCTATGTACTTGCAGTT----- 215
+                                     i   i    i     i       i  i    ii  i-----
+  rep                    57 CAACCTTCTGGTTCCAACCAGTCTGGGGTCTACGTGCTTGTGGTCAGCAT 106
+
+C PonBla_flattene       214 -TAG----CATTTTTTATCTGA-TGGGGGTCT--GCTTCCTATAAAAACA 173
+                            -   ----   ii ii i   i-         -- i   - ii i  -  
+  rep                   107 GTAGTCACCATCCTCCACCTGGGTGGGGGTCTTAGTTTC-TGCAGAA-CA 154
+
+C PonBla_flattene       172 ATTTAGGAGTGTGTGTCAGGCCTTTATCTATATCTTTCAAGGAACTGTGA 123
+                             i i iiii i  i     iiiv    v      ii ii    i----  
+  rep                   155 ACTCAAAGATATGCGTCAGATTGTTATGTATATCCCTTGAGGAG----GA 200
+
+C PonBla_flattene       122 GTTTGGTGATTCTGCCATGTGGCAGATTTA--GTCTAAATTTTTAACAGT 75
+                            ii v  -- i    iiv i v  v  vi  --  i     iv   - -- 
+  rep                   201 ACTAGG--ACTCTGTTTTATCGCTGAACTATTGTTTAAATCGTTA-C--T 245
+
+C PonBla_flattene        74 TTCCTGGTCCAACAGCTATTC-TTTGTTTCTACAT--CTTCACATTTTCT 28
+                              i  v ii i  v   v   -         i   -- i    -  ii  
+  rep                   246 TTTCTTGCTCGACTGCTTTTCCTTTGTTTCTGCATTCCCTCAC-TTCCCT 294
+
+C PonBla_flattene        27 AATCATTAACT-CTTGAGTCAGCCTTTT 1
+                               i v     -        v  ii   
+  rep                   295 AATTAGTAACTGCTTGAGTCTGCTCTTT 322
+
+Transitions / transversions = 3.93 (59 / 15); Gap_init rate = 0.06 (18 / 295), avg. gap size = 2.50 (45 / 18)
+
+46 matching entries (first file).
+

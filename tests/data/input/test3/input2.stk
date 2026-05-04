@@ -1,0 +1,15 @@
+# STOCKHOLM 1.0
+#=GF AC DF999999999
+#=GF ID MyFunTE
+#=GF DE An Example TE
+#=GF AU Foo Bar
+#=GF TP Interspersed_Repeat;Transposable_Element;Class_I_Retrotransposition;LINE;Group-II;Group-2;R1-like;R1-group;I-group;Jockey
+#=GF OC melanogaster subgroup
+#=GF CC This is quite a bogus MSA, but good for testing this tool.
+#=GF ** And some more curators comments.
+#=GF DR RepBase;FooBar
+#=GF SQ 3
+Seq3:44-57_+  TTTCTCAACTAATT
+Seq3:45-58_+  TTTCTCAACTAATT
+Seq3:46-59_+  TTTCTCAACTAATT
+//

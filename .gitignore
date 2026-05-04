@@ -1,0 +1,25 @@
+# Build output
+/target/
+
+# Attic
+/attic/
+
+# Cargo lock is kept for binaries (remove this line if treating as a library)
+# Cargo.lock
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# My notebook
+notebook
+
+# Test and benchmark scratch files
+*.discoord
