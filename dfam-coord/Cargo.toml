@@ -1,0 +1,24 @@
+[package]
+name = "dfam-coord"
+version = "0.3.5"
+edition = "2021"
+repository = "https://github.com/Dfam-consortium/DisCoord"
+authors = ["Robert Hubley <rhubley@systemsbiology.org>"]
+
+[lib]
+name = "dfam_coord"
+path = "src/lib.rs"
+
+[dependencies]
+#smitten = { git = "https://github.com/Dfam-consortium/Smitten.git", tag = "v1.0.0-alpha" }
+smitten = { git = "https://github.com/Dfam-consortium/Smitten.git" }
+dfam-stk-io = { path = "../dfam-stk-io" }
+clap = { version = "4", features = ["derive"] }
+regex = "1.11.1"
+flate2 = "1.0"
+bio = "0.35.0"
+rayon = "1.5"
+memmap2 = "0.9.5"
+tempfile = "3.2.0"
+indicatif = "0.17"
+aho-corasick = "1"
