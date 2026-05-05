@@ -3,10 +3,10 @@
 /// Populates `~/.cache/stk/` (or `--cache-dir`) with:
 ///   taxonomy.tsv        — NCBI scientific taxon names
 ///   taxonomy-common.tsv — common names / synonyms → scientific name
-///   classification.txt  — Dfam TP strings  (manual; see `update-cache info`)
-///   dfam-names.txt      — Dfam family IDs  (manual; see `update-cache info`)
+///   classification.tsv  — Dfam TP classification strings (short and long forms)
+///   dfam-names.txt      — Dfam family names
 ///
-/// Requires: curl(1) and unzip(1) on the PATH for the taxonomy download.
+/// Requires: curl(1) and unzip(1) on the PATH.
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
@@ -18,6 +18,10 @@ use std::process::Command;
 use dfam_curator::dfam::cache::cache_dir;
 
 const TAXONOMY_URL: &str = "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip";
+const DFAM_CLASS_URL: &str =
+    "https://www.dfam.org/releases/current/infrastructure/class_ns.tsv";
+const DFAM_NAMES_URL: &str =
+    "https://www.dfam.org/releases/current/infrastructure/name_ns.tsv";
 
 /// Name classes from names.dmp that we index for common-name lookup.
 /// "scientific name" is handled separately; synonyms and misnomers are excluded.
@@ -52,9 +56,13 @@ struct Args {
 enum Cmd {
     /// Download NCBI taxonomy and write taxonomy.tsv + taxonomy-common.tsv.
     Taxonomy,
-    /// Print instructions for the files that cannot be auto-fetched.
+    /// Download Dfam TP classifications and write classification.tsv.
+    Classifications,
+    /// Download Dfam family names and write dfam-names.txt.
+    Names,
+    /// Show cache status.
     Info,
-    /// Download all auto-fetchable data, then print info for the rest. [default]
+    /// Download all data, then show cache status. [default]
     All,
 }
 
@@ -70,10 +78,14 @@ fn main() -> Result<()> {
     match args.command {
         None | Some(Cmd::All) => {
             fetch_taxonomy(&cdir, args.force)?;
+            fetch_dfam_classifications(&cdir, args.force)?;
+            fetch_dfam_names(&cdir, args.force)?;
             print_info(&cdir);
         }
-        Some(Cmd::Taxonomy) => fetch_taxonomy(&cdir, args.force)?,
-        Some(Cmd::Info) => print_info(&cdir),
+        Some(Cmd::Taxonomy)        => fetch_taxonomy(&cdir, args.force)?,
+        Some(Cmd::Classifications) => fetch_dfam_classifications(&cdir, args.force)?,
+        Some(Cmd::Names)           => fetch_dfam_names(&cdir, args.force)?,
+        Some(Cmd::Info)            => print_info(&cdir),
     }
 
     Ok(())
@@ -174,21 +186,91 @@ fn fetch_taxonomy(cdir: &Path, force: bool) -> Result<()> {
     Ok(())
 }
 
+// ── Dfam data ─────────────────────────────────────────────────────────────────
+
+/// Download `url` to `dest` atomically via a temp file.
+fn fetch_url_to_file(url: &str, dest: &Path) -> Result<()> {
+    let dir = dest.parent().unwrap_or(Path::new("."));
+    let tmp = tempfile::Builder::new()
+        .tempfile_in(dir)
+        .context("cannot create temp file in cache dir")?;
+    let tmp_path = tmp.path().to_path_buf();
+
+    let status = Command::new("curl")
+        .args(["-fSL", "--progress-bar", url, "-o"])
+        .arg(&tmp_path)
+        .status()
+        .context("cannot run curl — is curl installed and on your PATH?")?;
+
+    if !status.success() {
+        bail!("curl failed with exit status {:?}", status.code());
+    }
+
+    std::fs::rename(&tmp_path, dest)
+        .with_context(|| format!("cannot write {}", dest.display()))?;
+    let _ = tmp.keep();
+
+    Ok(())
+}
+
+/// Count non-empty, non-comment lines in a file.
+fn count_data_lines(path: &Path) -> usize {
+    std::fs::File::open(path)
+        .ok()
+        .map(|f| {
+            BufReader::new(f)
+                .lines()
+                .filter_map(|l| l.ok())
+                .filter(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.starts_with('#')
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn fetch_dfam_classifications(cdir: &Path, force: bool) -> Result<()> {
+    let dest = cdir.join("classification.tsv");
+    if dest.exists() && !force {
+        eprintln!("classification.tsv already exists; skipping (use --force to re-download)");
+        return Ok(());
+    }
+    eprintln!("Downloading Dfam classifications from {DFAM_CLASS_URL}");
+    fetch_url_to_file(DFAM_CLASS_URL, &dest)?;
+    let n = count_data_lines(&dest);
+    eprintln!("Wrote {n} classification entries → {}", dest.display());
+    Ok(())
+}
+
+fn fetch_dfam_names(cdir: &Path, force: bool) -> Result<()> {
+    let dest = cdir.join("dfam-names.txt");
+    if dest.exists() && !force {
+        eprintln!("dfam-names.txt already exists; skipping (use --force to re-download)");
+        return Ok(());
+    }
+    eprintln!("Downloading Dfam names from {DFAM_NAMES_URL}");
+    fetch_url_to_file(DFAM_NAMES_URL, &dest)?;
+    let n = count_data_lines(&dest);
+    eprintln!("Wrote {n} Dfam family names → {}", dest.display());
+    Ok(())
+}
+
 // ── Info ──────────────────────────────────────────────────────────────────────
 
 fn print_info(cdir: &Path) {
+    const FILES: &[(&str, &str)] = &[
+        ("taxonomy.tsv",        "NCBI scientific taxon names"),
+        ("taxonomy-common.tsv", "NCBI alternate name mappings"),
+        ("classification.tsv",  "Dfam TP classifications"),
+        ("dfam-names.txt",      "Dfam family names"),
+    ];
     println!();
-    println!("The following cache files must be supplied manually:");
+    println!("Cache directory: {}", cdir.display());
+    for (file, desc) in FILES {
+        let status = if cdir.join(file).exists() { "ok     " } else { "missing" };
+        println!("  [{status}]  {file}  ({desc})");
+    }
     println!();
-    println!("  {}", cdir.join("classification.txt").display());
-    println!("    One Dfam TP classification string per line.");
-    println!("    Obtain from https://dfam.org/classification (copy the leaf");
-    println!("    paths in semicolon-separated form, e.g.");
-    println!("    'Interspersed_Repeat;Transposable_Element;DNA_Transposon').");
-    println!();
-    println!("  {}", cdir.join("dfam-names.txt").display());
-    println!("    One Dfam family ID (e.g. AluSx) per line.");
-    println!("    Obtain from the Dfam bulk-download TSV at");
-    println!("    https://dfam.org/releases  (column 'name' from Dfam.h5 or");
-    println!("    the families.tsv export).");
+    println!("Run 'update-cache' or 'update-cache all' to refresh all files.");
 }

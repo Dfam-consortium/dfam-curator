@@ -1,7 +1,8 @@
 ##
-## DisCoord Version 0.1.0
+## DisCoord Version 0.4.0
 ##
 ## Threads: all available
+## Mapping method: aho-corasick
 ## File: tests/data/input/test1/input.fa, Format: Fasta, Compression: None
 ##       Sequences: 57
 ## Total references assemblies: 3

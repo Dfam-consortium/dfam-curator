@@ -115,27 +115,31 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     d
 }
 
-/// Cross-record check: report duplicate IDs within a file.
+/// Cross-record check: report duplicate IDs within a file (case-insensitive).
 ///
 /// Returns file-level diagnostics (the caller prints them with label `FILE`).
 pub fn check_duplicate_ids(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
-    let mut seen: HashMap<String, Vec<String>> = HashMap::new();
+    // key = lowercased ID → (first-seen original ID, record labels)
+    let mut seen: HashMap<String, (String, Vec<String>)> = HashMap::new();
     for r in records {
         if let Some(id) = r.gf_first("ID") {
             let id = id.trim().to_string();
             if !id.is_empty() {
-                seen.entry(id).or_default().push(r.label());
+                let entry = seen
+                    .entry(id.to_lowercase())
+                    .or_insert_with(|| (id.clone(), Vec::new()));
+                entry.1.push(r.label());
             }
         }
     }
     let mut out = Vec::new();
-    for (id, labels) in &seen {
+    for (_, (orig_id, labels)) in &seen {
         if labels.len() > 1 {
             out.push(warn(
                 "duplicate_id",
                 format!(
                     "ID {:?} appears in {} records: {}",
-                    id,
+                    orig_id,
                     labels.len(),
                     labels.join(", ")
                 ),
@@ -540,7 +544,7 @@ fn tier2_id(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
     if let Some(ref names) = cache.dfam_names {
         if let Some(id) = r.gf_first("ID") {
             let id = id.trim();
-            if !id.is_empty() && names.contains(id) {
+            if !id.is_empty() && names.contains(&id.to_lowercase()) {
                 d.push(warn(
                     "id_in_dfam",
                     format!("ID {:?} already exists in Dfam", id),
