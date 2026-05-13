@@ -5,6 +5,7 @@ use flate2::Compression;
 use rayon::prelude::*;
 use aho_corasick::AhoCorasick;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::time::Duration;
 use dfam_stk_io::{IDVersion, SeqRow};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -123,21 +124,61 @@ pub fn load_reference(path: &str) -> io::Result<HashMap<String, Vec<u8>>> {
     }
 }
 
+/// Derive a canonical assembly name from a reference file path by stripping
+/// the directory component and any standard genomic file suffixes
+/// (case-insensitive, handles stacked extensions like `.fa.gz`).
+pub fn derive_assembly_name(path: &str) -> String {
+    let mut name = Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path)
+        .to_string();
+
+    let suffixes = [".gz", ".2bit", ".fasta", ".fna", ".fa", ".fas", ".fsa"];
+    loop {
+        let lower = name.to_lowercase();
+        let mut stripped = false;
+        for suffix in &suffixes {
+            if lower.ends_with(suffix) {
+                name.truncate(name.len() - suffix.len());
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped {
+            break;
+        }
+    }
+    name
+}
+
 pub fn process_sequences(
     sequences: Vec<SequenceRecord>,
     genome_map: &HashMap<String, Vec<u8>>,
     map_sequences: bool,
     use_aho_corasick: bool,
     debug_mode: bool,
+    remapped_assembly: Option<&str>,
 ) -> Vec<SequenceRecord> {
     let mut results = sequences;
 
+    let t_validate = std::time::Instant::now();
     validate_sequences(&mut results, genome_map, debug_mode);
+    let invalid_count = results.iter().filter(|r| r.validated.is_none()).count();
+    let valid_count = results.len() - invalid_count;
+    println!(
+        "## o Validation: {}/{} validated in {:.2}s — {} need mapping",
+        valid_count,
+        results.len(),
+        t_validate.elapsed().as_secs_f32(),
+        invalid_count,
+    );
+
     if map_sequences {
         if use_aho_corasick {
-            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode);
+            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly);
         } else {
-            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode);
+            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly);
         }
     }
 
@@ -211,6 +252,7 @@ pub fn write_stockholm_output(
     let file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(!append)
         .append(append)
         .open(output_path)?;
 
@@ -265,6 +307,7 @@ pub fn write_fasta_output(
     let file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(!append)
         .append(append)
         .open(output_path)?;
 
@@ -313,6 +356,7 @@ pub fn write_delimited_output(
     let file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(!append)
         .append(append)
         .open(output_path)?;
 
@@ -635,8 +679,10 @@ pub fn boyer_moore_search_with_validation(
     records: &mut [SequenceRecord],
     genome_map: &HashMap<String, Vec<u8>>,
     debug_mode: bool,
+    remapped_assembly: Option<&str>,
 ) {
     let invalid_count = records.iter().filter(|r| r.validated.is_none()).count();
+    println!("## o Mapping {} sequences", invalid_count);
     let progress = ProgressBar::new(invalid_count as u64);
     progress.set_style(
         ProgressStyle::default_bar()
@@ -644,6 +690,7 @@ pub fn boyer_moore_search_with_validation(
             .unwrap()
             .progress_chars("#>-"),
     );
+    progress.enable_steady_tick(Duration::from_millis(100));
 
     // Snapshot positions already occupied by validated records so the
     // mapping step can prefer non-redundant placements.
@@ -720,6 +767,7 @@ pub fn boyer_moore_search_with_validation(
             record.end = Some((best_match.0 + pattern.len()) as u64);
             record.orient = Some(best_match.1);
             record.sequence_id = best_match.2.clone();
+            record.assembly_id = remapped_assembly.map(|s| s.to_string());
             record.validated = Some(if found_positions.len() == 1 {
                 "fixed_remapped_unique".to_string()
             } else {
@@ -752,8 +800,10 @@ pub fn aho_corasick_search_with_validation(
     records: &mut [SequenceRecord],
     genome_map: &HashMap<String, Vec<u8>>,
     debug_mode: bool,
+    remapped_assembly: Option<&str>,
 ) {
     let invalid_count = records.iter().filter(|r| r.validated.is_none()).count();
+    println!("## o Mapping {} sequences", invalid_count);
     let progress = ProgressBar::new(invalid_count as u64);
     progress.set_style(
         ProgressStyle::default_bar()
@@ -761,6 +811,7 @@ pub fn aho_corasick_search_with_validation(
             .unwrap()
             .progress_chars("#>-"),
     );
+    progress.enable_steady_tick(Duration::from_millis(100));
 
     let occupied: std::collections::HashSet<(String, u64, u64, char)> = records
         .iter()
@@ -833,6 +884,7 @@ pub fn aho_corasick_search_with_validation(
             record.end = Some((best_match.0 + pattern.len()) as u64);
             record.orient = Some(best_match.1);
             record.sequence_id = best_match.2.clone();
+            record.assembly_id = remapped_assembly.map(|s| s.to_string());
             record.validated = Some(if found_positions.len() == 1 {
                 "fixed_remapped_unique".to_string()
             } else {

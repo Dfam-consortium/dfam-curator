@@ -102,6 +102,9 @@ pub struct StkRecord {
     pub sequences: Vec<SeqRow>,
     /// Lines beginning with `#` that are not a valid Stockholm annotation.
     pub unknown_annotations: Vec<String>,
+    /// `true` when the record was closed by a `//` line; `false` when EOF
+    /// was reached without a terminator.
+    pub terminated: bool,
 }
 
 impl StkRecord {
@@ -238,6 +241,7 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
             }
 
             if trimmed == "//" {
+                record.terminated = true;
                 return Some(Ok(record));
             }
 
@@ -275,14 +279,14 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
             }
 
             // Sequence line: "name   ACGT..."
+            // Each row is always a complete, independent sequence — Stockholm
+            // has no interleaved/wrapped-block format.  Duplicate identifiers
+            // (tandem repeats, split alignments) are valid and must be kept as
+            // separate rows, never concatenated.
             let mut it = trimmed.splitn(2, char::is_whitespace);
             if let (Some(name), Some(seq)) = (it.next(), it.next()) {
                 let seq = seq.trim();
-                if let Some(row) = record.sequences.iter_mut().find(|r| r.original_id == name) {
-                    row.aligned_seq.push_str(seq);
-                } else {
-                    record.sequences.push(SeqRow::from_name_seq(name, seq));
-                }
+                record.sequences.push(SeqRow::from_name_seq(name, seq));
             }
         }
     }
@@ -391,19 +395,24 @@ consensus   ACGT
     }
 
     #[test]
-    fn interleaved_blocks_concatenated() {
+    fn duplicate_id_rows_kept_separate() {
+        // Two rows with the same identifier (e.g. a tandem repeat) must be
+        // stored as separate SeqRows, never concatenated.
         const STK: &str = "\
 # STOCKHOLM 1.0
-#=GF SQ    2
+#=GF SQ    3
 #=GC RF    xxxx
 seq1        ACGT
 seq2        TGCA
+seq1        AAAA
 //
 ";
         let records: Vec<_> = iter_records(Cursor::new(STK))
             .collect::<Result<_, _>>()
             .unwrap();
+        assert_eq!(records[0].sequences.len(), 3);
         assert_eq!(records[0].sequences[0].aligned_seq, "ACGT");
         assert_eq!(records[0].sequences[1].aligned_seq, "TGCA");
+        assert_eq!(records[0].sequences[2].aligned_seq, "AAAA");
     }
 }

@@ -1,6 +1,7 @@
 /// Tier-1 and tier-2 lint checks for Dfam Stockholm records.
 use std::collections::{HashMap, HashSet};
 
+use crate::consensus::{build_consensus_from_sequences, ConsensusParams};
 use crate::dfam::cache::Cache;
 use crate::dfam::record::RawDfamRecord;
 
@@ -90,6 +91,7 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     let mut d: Vec<Diagnostic> = Vec::new();
 
     check_header(record, &mut d);
+    check_terminator(record, &mut d);
     check_required_fields(record, &mut d);
     check_ac(record, &mut d);
     check_id(record, &mut d);
@@ -102,6 +104,7 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     check_sq(record, &mut d);
     check_ref_blocks(record, &mut d);
     check_rf(record, &mut d);
+    check_rf_consensus(record, &mut d);
     check_sequences(record, &mut d);
     check_unknown_tags(record, &mut d);
     check_unknown_annotations(record, &mut d);
@@ -117,39 +120,64 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
 
 /// Cross-record check: report duplicate IDs within a file (case-insensitive).
 ///
+/// Records that share an ID but carry an AC field are treated as update records
+/// (INFO); records that share an ID without AC are flagged as errors.
+///
 /// Returns file-level diagnostics (the caller prints them with label `FILE`).
 pub fn check_duplicate_ids(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
-    // key = lowercased ID → (first-seen original ID, record labels)
-    let mut seen: HashMap<String, (String, Vec<String>)> = HashMap::new();
+    // key = lowercased ID → Vec<(original ID, record label, has AC)>
+    let mut seen: HashMap<String, Vec<(String, String, bool)>> = HashMap::new();
     for r in records {
         if let Some(id) = r.gf_first("ID") {
             let id = id.trim().to_string();
             if !id.is_empty() {
-                let entry = seen
+                let has_ac = r.gf_has("AC");
+                seen
                     .entry(id.to_lowercase())
-                    .or_insert_with(|| (id.clone(), Vec::new()));
-                entry.1.push(r.label());
+                    .or_default()
+                    .push((id, r.label(), has_ac));
             }
         }
     }
     let mut out = Vec::new();
-    for (_, (orig_id, labels)) in &seen {
-        if labels.len() > 1 {
-            out.push(warn(
-                "duplicate_id",
-                format!(
-                    "ID {:?} appears in {} records: {}",
-                    orig_id,
-                    labels.len(),
-                    labels.join(", ")
-                ),
-            ));
+    for (_, entries) in &seen {
+        if entries.len() > 1 {
+            for (orig_id, label, has_ac) in entries {
+                if *has_ac {
+                    out.push(info(
+                        "duplicate_id_update",
+                        format!(
+                            "record {} has ID {:?} which also appears in other records; \
+                             AC present — treating as an update record",
+                            label, orig_id
+                        ),
+                    ));
+                } else {
+                    out.push(err(
+                        "duplicate_id",
+                        format!(
+                            "record {} has ID {:?} which also appears in other records; \
+                             add AC to mark as an update, or use a unique ID",
+                            label, orig_id
+                        ),
+                    ));
+                }
+            }
         }
     }
     out
 }
 
 // ── Individual check functions ────────────────────────────────────────────────
+
+fn check_terminator(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    if !r.terminated {
+        d.push(err(
+            "missing_terminator",
+            "record is not closed by a '//' line (unexpected end of file)",
+        ));
+    }
+}
 
 /// Validate the `# STOCKHOLM <major>.<minor>` header line.
 fn check_header(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
@@ -209,10 +237,10 @@ fn check_id(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
         let id = id.trim();
         if id.is_empty() {
             d.push(err("empty_field", "ID field is present but empty"));
-        } else if id.len() > 20 {
+        } else if id.len() > 45 {
             d.push(err(
                 "id_too_long",
-                format!("ID {:?} is {} characters (max 20)", id, id.len()),
+                format!("ID {:?} is {} characters (max 45)", id, id.len()),
             ));
         } else if id.chars().all(|c| c.is_ascii_digit()) {
             d.push(err(
@@ -358,6 +386,41 @@ fn check_rf(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
+fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    let rf = match r.gc.get("RF") {
+        Some(rf) if !rf.is_empty() => rf,
+        _ => return,
+    };
+    if r.sequences.is_empty() {
+        return;
+    }
+
+    // Sequences in STK files use '.' for gaps; the consensus builder uses '-'.
+    let converted: Vec<Vec<u8>> = r.sequences.iter()
+        .map(|row| row.aligned_seq.bytes().map(|b| if b == b'.' { b'-' } else { b }).collect())
+        .collect();
+    let raw_seqs: Vec<&[u8]> = converted.iter().map(|v| v.as_slice()).collect();
+    let called = build_consensus_from_sequences(&raw_seqs, &ConsensusParams::default());
+
+    // Match the gap character used in the RF line ('.' or '-').
+    let rf_gap: u8 = if rf.as_bytes().contains(&b'.') { b'.' } else { b'-' };
+    let called_rf: Vec<u8> = called.iter()
+        .map(|&b| if b == b'-' { rf_gap } else { b })
+        .collect();
+
+    // Case-insensitive comparison so lowercase RF letters are handled.
+    let mismatch = called_rf.len() != rf.len()
+        || called_rf.iter().zip(rf.bytes())
+            .any(|(&c, r)| c.to_ascii_uppercase() != r.to_ascii_uppercase());
+
+    if mismatch {
+        d.push(warn(
+            "rf_consensus_mismatch",
+            "the #=GC RF line does not match the consensus called from the alignment sequences",
+        ));
+    }
+}
+
 fn check_sequences(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     let mut first_len: Option<usize> = None;
 
@@ -385,20 +448,24 @@ fn check_sequences(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
             }
         }
 
-        // All sequences must be the same aligned length.
+        // All sequences must be the same aligned length.  When RF is present,
+        // rf_length_mismatch (from check_rf) already flags any outlier against
+        // the canonical column width, so skip the redundant first-seq comparison.
         let len = row.aligned_seq.len();
-        match first_len {
-            None => first_len = Some(len),
-            Some(fl) if len != fl => {
-                d.push(err(
-                    "seq_length_mismatch",
-                    format!(
-                        "sequence {:?} length {} differs from first sequence length {}",
-                        row.original_id, len, fl
-                    ),
-                ));
+        if r.gc.get("RF").is_none() {
+            match first_len {
+                None => first_len = Some(len),
+                Some(fl) if len != fl => {
+                    d.push(err(
+                        "seq_length_mismatch",
+                        format!(
+                            "sequence {:?} length {} differs from first sequence length {}",
+                            row.original_id, len, fl
+                        ),
+                    ));
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 }
@@ -545,10 +612,17 @@ fn tier2_id(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
         if let Some(id) = r.gf_first("ID") {
             let id = id.trim();
             if !id.is_empty() && names.contains(&id.to_lowercase()) {
-                d.push(warn(
-                    "id_in_dfam",
-                    format!("ID {:?} already exists in Dfam", id),
-                ));
+                if r.gf_has("AC") {
+                    d.push(info(
+                        "id_in_dfam_update",
+                        format!("ID {:?} already exists in Dfam; AC present — treating as an update record", id),
+                    ));
+                } else {
+                    d.push(err(
+                        "id_in_dfam",
+                        format!("ID {:?} already exists in Dfam; add AC to mark as an update, or use a unique ID", id),
+                    ));
+                }
             }
         }
     }
@@ -567,6 +641,7 @@ mod tests {
         let mut r = RawDfamRecord::default();
         r.record_num = 1;
         r.header = "# STOCKHOLM 1.0".to_string();
+        r.terminated = true;
         for (tag, val) in gf {
             r.gf.push((tag.to_string(), val.to_string()));
         }
@@ -625,7 +700,7 @@ mod tests {
     #[test]
     fn id_too_long() {
         let r = make_record(
-            &[("ID","ThisNameIsWayTooLongForDfam"),
+            &[("ID","ThisNameIsWayTooLongForDfamAndExceedsTheFortyFiveCharacterLimit"),
               ("DE","desc"),("AU","X"),("TP","Y"),("OC","Z"),("SQ","0")],
             Some(""),
             &[],
@@ -821,6 +896,54 @@ s1          ACGT\n\
     }
 
     #[test]
+    fn rf_consensus_match_no_warn() {
+        // Four identical ACGT sequences → consensus is ACGT; RF matches.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("ACGT"),
+            &[("s1","ACGT"),("s2","ACGT"),("s3","ACGT"),("s4","ACGT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn rf_consensus_mismatch_warns() {
+        // Sequences are all ACGT but RF claims TTTT.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("TTTT"),
+            &[("s1","ACGT"),("s2","ACGT"),("s3","ACGT"),("s4","ACGT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn rf_consensus_dot_gap_mismatch_warns() {
+        // Consensus column 2 is all-gap ('.') but RF marks it as non-gap ('x').
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("AxGT"),
+            &[("s1","A.GT"),("s2","A.GT"),("s3","A.GT"),("s4","A.GT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn missing_terminator_is_error() {
+        let mut r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""),
+            &[],
+        );
+        r.terminated = false;
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "missing_terminator"), "{:?}", errors(&diags));
+    }
+
+    #[test]
     fn oc_common_name_suggestion() {
         let mut tax = HashSet::new();
         tax.insert("Rattus norvegicus".to_string());
@@ -868,7 +991,7 @@ s1          ACGT\n\
     }
 
     #[test]
-    fn duplicate_ids_detected() {
+    fn duplicate_ids_no_ac_is_error() {
         let mut r1 = RawDfamRecord::default();
         r1.record_num = 1;
         r1.gf.push(("ID".to_string(), "Fam1".to_string()));
@@ -882,7 +1005,50 @@ s1          ACGT\n\
         r3.gf.push(("ID".to_string(), "Fam2".to_string()));
 
         let diags = check_duplicate_ids(&[r1, r2, r3]);
-        assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("Fam1"));
+        // Two records share "Fam1" with no AC → two errors
+        assert_eq!(diags.len(), 2);
+        assert!(diags.iter().all(|d| d.severity == Severity::Error));
+        assert!(diags.iter().all(|d| d.check == "duplicate_id"));
+        assert!(diags.iter().any(|d| d.message.contains("Fam1")));
+    }
+
+    #[test]
+    fn duplicate_id_with_ac_is_info_update() {
+        // r1: new record, no AC
+        let mut r1 = RawDfamRecord::default();
+        r1.record_num = 1;
+        r1.gf.push(("ID".to_string(), "Fam1".to_string()));
+
+        // r2: update record, has AC
+        let mut r2 = RawDfamRecord::default();
+        r2.record_num = 2;
+        r2.gf.push(("ID".to_string(), "Fam1".to_string()));
+        r2.gf.push(("AC".to_string(), "DF0001234".to_string()));
+
+        let diags = check_duplicate_ids(&[r1, r2]);
+        // r1 (no AC) → error; r2 (has AC) → info
+        let errors: Vec<_> = diags.iter().filter(|d| d.severity == Severity::Error).collect();
+        let infos: Vec<_> = diags.iter().filter(|d| d.severity == Severity::Info).collect();
+        assert_eq!(errors.len(), 1, "expected one error for record without AC");
+        assert_eq!(errors[0].check, "duplicate_id");
+        assert_eq!(infos.len(), 1, "expected one info for update record with AC");
+        assert_eq!(infos[0].check, "duplicate_id_update");
+    }
+
+    #[test]
+    fn duplicate_ids_both_have_ac_are_both_info() {
+        let mut r1 = RawDfamRecord::default();
+        r1.record_num = 1;
+        r1.gf.push(("ID".to_string(), "Fam1".to_string()));
+        r1.gf.push(("AC".to_string(), "DF0001234".to_string()));
+
+        let mut r2 = RawDfamRecord::default();
+        r2.record_num = 2;
+        r2.gf.push(("ID".to_string(), "Fam1".to_string()));
+        r2.gf.push(("AC".to_string(), "DF0001234".to_string()));
+
+        let diags = check_duplicate_ids(&[r1, r2]);
+        assert!(diags.iter().all(|d| d.severity == Severity::Info));
+        assert!(diags.iter().all(|d| d.check == "duplicate_id_update"));
     }
 }

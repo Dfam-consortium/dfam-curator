@@ -115,6 +115,13 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
         }
     }
 
+    if args.genome.is_none() {
+        eprintln!(
+            "WARN  [genome] Without a reference assembly, sequence coordinates cannot be \
+             verified.  Provide a FASTA or 2bit file with --genome for full validation."
+        );
+    }
+
     // Load reference genome once if --genome was supplied.
     let genome_map: Option<HashMap<String, Vec<u8>>> = match &args.genome {
         None => None,
@@ -208,7 +215,7 @@ fn coord_lint(
                     severity: Severity::Warn,
                     check: "seq_coord_invalid",
                     message: format!(
-                        "sequence {:?} coordinates do not match reference within ±3 bp",
+                        "sequence {:?} coordinates do not match reference within +/-3 bp",
                         orig
                     ),
                 });

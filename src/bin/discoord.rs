@@ -1,14 +1,16 @@
 use clap::{CommandFactory, Parser};
 use dfam_coord::{
-    detect_format_and_compression, find_reference_file, init_thread_pool, load_reference,
-    output_results, parse_delimited_file, parse_fasta, parse_stockholm, process_sequences,
-    write_delimited_output, write_fasta_output, write_stockholm_output, LogLevel, SequenceRecord,
+    derive_assembly_name, detect_format_and_compression, find_reference_file, init_thread_pool,
+    load_reference, output_results, parse_delimited_file, parse_fasta, parse_stockholm,
+    process_sequences, write_delimited_output, write_fasta_output, write_stockholm_output,
+    LogLevel, SequenceRecord,
 };
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::time::Instant;
 
 #[derive(Parser, Debug)]
 #[command(name = "discoord", author, version, about, long_about = None)]
@@ -133,17 +135,45 @@ fn main() {
         println!("## Reference default: {}", ref_def);
     }
 
-    for (assembly_id, sequences) in sequences_by_assembly {
-        let genome_map = if let Some(ref_dir) = &args.reference_dir {
-            let ref_file = find_reference_file(ref_dir, &assembly_id, &args.reference_default);
-            load_reference(&ref_file).expect("Failed to load reference")
-        } else if let Some(ref_default) = &args.reference_default {
-            load_reference(ref_default).expect("Failed to load default reference")
-        } else {
-            panic!("No reference file provided for sequences without an assembly_id");
-        };
+    // When using -r with -m, derive the assembly name from the reference filename
+    // so successfully remapped records get their assembly_id updated.
+    let remapped_assembly: Option<String> = if args.map_sequences {
+        args.reference_default.as_ref().map(|path| derive_assembly_name(path))
+    } else {
+        None
+    };
+    if let Some(ref name) = remapped_assembly {
+        println!("## Remapped assembly name: {}", name);
+    }
+    println!("##");
 
-        let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode);
+    if let Some(ref_dir) = &args.reference_dir {
+        // Per-assembly lookup: each group gets its own reference file.
+        for (assembly_id, sequences) in sequences_by_assembly {
+            let ref_file = find_reference_file(ref_dir, &assembly_id, &args.reference_default);
+            print!("## o Loading reference: {} ... ", ref_file);
+            let t = Instant::now();
+            let genome_map = load_reference(&ref_file).expect("Failed to load reference");
+            println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
+            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref());
+            for record in results.iter_mut() {
+                if record.validated.is_none() {
+                    record.validated = Some("invalid".to_string());
+                    validation_failed = true;
+                }
+            }
+            processed_sequences.extend(results);
+        }
+    } else if let Some(ref_default) = &args.reference_default {
+        // Single reference: flatten all groups into one batch so there is only
+        // one validation+mapping pass (and one progress bar) regardless of how
+        // many distinct assembly_id prefixes appear in the input identifiers.
+        print!("## o Loading reference: {} ... ", ref_default);
+        let t = Instant::now();
+        let genome_map = load_reference(ref_default).expect("Failed to load default reference");
+        println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
+        let all_sequences: Vec<SequenceRecord> = sequences_by_assembly.into_values().flatten().collect();
+        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref());
         for record in results.iter_mut() {
             if record.validated.is_none() {
                 record.validated = Some("invalid".to_string());
@@ -151,6 +181,8 @@ fn main() {
             }
         }
         processed_sequences.extend(results);
+    } else {
+        panic!("No reference file provided for sequences without an assembly_id");
     }
 
     processed_sequences.sort_by_key(|record| (record.input_file.clone(), record.order));
@@ -193,6 +225,7 @@ fn main() {
             .cloned()
             .collect();
 
+        println!();
         output_results(&records, args.log_level.clone(), format!("Summary for {}", input_file));
         if args.output_dir.is_some() && !output_file.is_empty() {
             match format {

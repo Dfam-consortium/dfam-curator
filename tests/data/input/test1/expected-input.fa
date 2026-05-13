@@ -22,21 +22,21 @@ TTTCTCAACTAATT
 TTTCTCAACTAATT
 >Seq3:43-56_+  : fixed_minus3
 TTTCTCAACTAATT
->seq1:63-82_+ : fixed_remapped_unique not from 1-20 but rather 63-72
+>GCF999999.1:seq1:63-82_+ : fixed_remapped_unique not from 1-20 but rather 63-72
 TGTAGTTATTGTTTTAATGA
->seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+>GCF999999.1:seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
 AATTTA
->seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+>GCF999999.1:seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
 TTT
->Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+>GCF999999.1:Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
 CACCGAGTACAC
->Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+>GCF999999.1:Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
 TCACGCAGAATA
 >Seq3:6-9_+ : valid normalized equivalent should be Seq3:6-9_+
 GCCC
 >seq2:19-26_+ : fixed_orient
 TAAAAAAG
->seq1:seq1:1-100_+       : fixed_remapped_unique
+>GCF999999.1:seq1:1-100_+       : fixed_remapped_unique
 CGTTTGTGGTAATTTAGAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
 >seq1:1       : invalid (single base change)
 CGTTTGTGGTAATTTACAGTTTTGGGCCTAATGTTGATTTGTCGGAACCAGAAGGGGGTTAGTGTAGTTATTGTTTTAATGAGTATTTAAGGTTAATGAA
@@ -60,15 +60,15 @@ TTTCTCAACTAATT
 TTTCTCAACTAATT
 >Seq3:43-56_+  : fixed_minus3
 TTTCTCAACTAATT
->seq1:63-82_+   : fixed_remapped_unique not from 1-20 but rather 63-72
+>GCF999999.1:seq1:63-82_+   : fixed_remapped_unique not from 1-20 but rather 63-72
 TGTAGTTATTGTTTTAATGA
->seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+>GCF999999.1:seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
 AATTTA
->seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+>GCF999999.1:seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
 TTT
->Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+>GCF999999.1:Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
 CACCGAGTACAC
->Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+>GCF999999.1:Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
 TCACGCAGAATA
 >Seq3:6-9_+ : valid normalized equivalent should be Seq3:6-9_+
 GCCC
@@ -94,15 +94,15 @@ TTTCTCAACTAATT
 TTTCTCAACTAATT
 >Seq3:43-56_+  : fixed_minus3
 TTTCTCAACTAATT
->seq1:63-82_+   : fixed_remapped_unique not from 1-20 but rather 63-72
+>GCF999999.1:seq1:63-82_+   : fixed_remapped_unique not from 1-20 but rather 63-72
 TGTAGTTATTGTTTTAATGA
->seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
+>GCF999999.1:seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
 AATTTA
->seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+>GCF999999.1:seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
 TTT
->Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
+>GCF999999.1:Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
 CACCGAGTACAC
->Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
+>GCF999999.1:Seq3:69-80_- : fixed_remapped_unique not on seq1 but Seq3 from 69-80 and on reverse strand
 TCACGCAGAATA
 >Seq3:6-9_+ : valid normalized equivalent should be Seq3:6-9_+
 GCCC

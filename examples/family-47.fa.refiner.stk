@@ -1,8 +1,9 @@
 # STOCKHOLM 1.0
-#=GF ID family-47
+#=GF AC DF000000001
+#=GF ID AluY
 #=GF DE This is a test
 #=GF AU Robert Hubley, John Smith
-#=GF TP Unknown;
+#=GF TP Interspersed_Repeat;Unknown
 #=GF OC Mus musculus
 #=GF CC refLength=544 refName=family-47
 #=GF BM RepeatModeler/MultAln
