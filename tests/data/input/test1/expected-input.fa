@@ -64,7 +64,7 @@ TTTCTCAACTAATT
 TGTAGTTATTGTTTTAATGA
 >GCF999999.1:seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
 AATTTA
->GCF999999.1:seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+>GCF999999.1:seq1:20-22_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
 TTT
 >GCF999999.1:Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
 CACCGAGTACAC
@@ -98,7 +98,7 @@ TTTCTCAACTAATT
 TGTAGTTATTGTTTTAATGA
 >GCF999999.1:seq1:11-16_+    : fixed_remapped_unique (at least on seq1 it is) not from 1-4 but rather 11-14
 AATTTA
->GCF999999.1:seq1:21-23_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
+>GCF999999.1:seq1:38-40_+  : fixed_remapped_ambig not from 27-29 but rather 21-23 (closest)
 TTT
 >GCF999999.1:Seq3:16-27_+ : fixed_remapped_unique not on seq1 but Seq3 from 16-27
 CACCGAGTACAC

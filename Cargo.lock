@@ -367,6 +367,7 @@ dependencies = [
  "dfam-coord",
  "dfam-stk-io",
  "dirs",
+ "regex",
  "serde_json",
  "strsim",
  "tempfile",

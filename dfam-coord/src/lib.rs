@@ -159,6 +159,7 @@ pub fn process_sequences(
     use_aho_corasick: bool,
     debug_mode: bool,
     remapped_assembly: Option<&str>,
+    remove_duplicates: bool,
 ) -> Vec<SequenceRecord> {
     let mut results = sequences;
 
@@ -176,9 +177,9 @@ pub fn process_sequences(
 
     if map_sequences {
         if use_aho_corasick {
-            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly);
+            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly, remove_duplicates);
         } else {
-            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly);
+            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly, remove_duplicates);
         }
     }
 
@@ -186,6 +187,36 @@ pub fn process_sequences(
 }
 
 pub fn parse_stockholm(file_path: &str, is_gzip: bool) -> Result<(Vec<SequenceRecord>, Vec<String>), String> {
+    // For non-gzip files we know the compressed == on-disk size and can show a
+    // determinate bytes bar.  For gzip the on-disk size is the compressed size
+    // so byte counts would overshoot; use a spinner instead.
+    let file_size = if !is_gzip {
+        std::fs::metadata(file_path).map(|m| m.len()).unwrap_or(0)
+    } else {
+        0
+    };
+
+    let progress: ProgressBar = if file_size > 0 {
+        let pb = ProgressBar::new(file_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("## o Parsing STK: [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({elapsed})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("## o Parsing STK: {spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        pb.set_message("0 records, 0 sequences");
+        pb
+    };
+    progress.enable_steady_tick(Duration::from_millis(100));
+
     let file = File::open(file_path).map_err(|e| format!("Could not open file {}: {}", file_path, e))?;
     let reader: Box<dyn BufRead> = if is_gzip {
             let decoder = GzDecoder::new(file);
@@ -199,9 +230,15 @@ pub fn parse_stockholm(file_path: &str, is_gzip: bool) -> Result<(Vec<SequenceRe
     let mut current_record: Vec<(String,String)> = Vec::new();
     let mut metadata_idx = 0;
     let mut order = 0;
+    let mut bytes_read: u64 = 0;
 
     for line in reader.lines() {
         let line = line.map_err(|e| format!("Error reading line: {}", e))?;
+        bytes_read += line.len() as u64 + 1; // +1 approximates the newline
+        if file_size > 0 {
+            progress.set_position(bytes_read.min(file_size));
+        }
+
         if line.starts_with("#") {
             current_metadata.push_str(&line);
             current_metadata.push('\n');
@@ -215,14 +252,28 @@ pub fn parse_stockholm(file_path: &str, is_gzip: bool) -> Result<(Vec<SequenceRe
             metadata.push(current_metadata.clone());
             current_metadata.clear();
 
-for (name, seq) in current_record.drain(..) {
-    let row = SeqRow::from_name_seq(&name, &seq);
-    if row.sequence_id.is_none() {
-        println!("Failed to parse identifier: {} ... leaving unchanged", name);
-    }
-    sequences.push(SequenceRecord::from_seq_row(&row, file_path, order, metadata_idx));
-    order += 1;
-}
+            for (name, seq) in current_record.drain(..) {
+                let row = SeqRow::from_name_seq(&name, &seq);
+                if row.sequence_id.is_none() {
+                    println!("Failed to parse identifier: {} ... leaving unchanged", name);
+                }
+                sequences.push(SequenceRecord::from_seq_row(&row, file_path, order, metadata_idx));
+                order += 1;
+                // Update spinner message every 500 sequences (gzip path).
+                if file_size == 0 && order % 500 == 0 {
+                    progress.set_message(format!(
+                        "{} records, {} sequences",
+                        metadata_idx + 1, order
+                    ));
+                }
+            }
+
+            if file_size == 0 {
+                progress.set_message(format!(
+                    "{} records, {} sequences",
+                    metadata_idx + 1, sequences.len()
+                ));
+            }
 
             metadata_idx += 1;
         } else {
@@ -234,6 +285,8 @@ for (name, seq) in current_record.drain(..) {
             }
         }
     }
+
+    progress.finish_and_clear();
 
     if !current_record.is_empty() || !current_metadata.is_empty() {
         return Err("Missing trailing '//' at the end of the Stockholm file".to_string());
@@ -680,79 +733,58 @@ pub fn boyer_moore_search_with_validation(
     genome_map: &HashMap<String, Vec<u8>>,
     debug_mode: bool,
     remapped_assembly: Option<&str>,
+    remove_duplicates: bool,
 ) {
-    let invalid_count = records.iter().filter(|r| r.validated.is_none()).count();
-    println!("## o Mapping {} sequences", invalid_count);
+    let invalid_indices: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.validated.is_none())
+        .map(|(i, _)| i)
+        .collect();
+
+    let invalid_count = invalid_indices.len();
+    let t_map = std::time::Instant::now();
     let progress = ProgressBar::new(invalid_count as u64);
     progress.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+            .template("## o Mapping: {spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
             .unwrap()
             .progress_chars("#>-"),
     );
     progress.enable_steady_tick(Duration::from_millis(100));
 
-    // Snapshot positions already occupied by validated records so the
-    // mapping step can prefer non-redundant placements.
-    let occupied: std::collections::HashSet<(String, u64, u64, char)> = records
-        .iter()
-        .filter(|r| r.validated.is_some())
-        .filter_map(|r| match (r.start, r.end, r.orient) {
-            (Some(s), Some(e), Some(o)) => Some((r.sequence_id.clone(), s, e, o)),
-            _ => None,
-        })
-        .collect();
+    // Phase 1 (parallel): scan the genome for every unvalidated record.
+    // Results are (record_index, sorted_hits); order within the Vec is arbitrary.
+    let mut all_hits: Vec<(usize, Vec<(usize, char, String)>)> = invalid_indices
+        .par_iter()
+        .map(|&idx| {
+            let record = &records[idx];
+            let pattern = &record.sequence;
+            let rev_complement_pattern = reverse_complement(pattern);
+            let original_sequence_id = record.sequence_id.clone();
+            let mut found_positions: Vec<(usize, char, String)> = Vec::new();
 
-    records.par_iter_mut().filter(|r| r.validated.is_none()).for_each(|record| {
-        let pattern = &record.sequence;
-        let rev_complement_pattern = reverse_complement(pattern);
-        let mut found_positions = vec![];
-        let original_sequence_id = record.sequence_id.clone();
-
-        if let Some(target_sequence) = genome_map.get(&original_sequence_id) {
-            found_positions.extend(boyer_moore_search(target_sequence, pattern)
-                .into_iter()
-                .map(|pos| (pos, '+', original_sequence_id.clone())));
-
-            found_positions.extend(boyer_moore_search(target_sequence, &rev_complement_pattern)
-                .into_iter()
-                .map(|pos| (pos, '-', original_sequence_id.clone())));
-        }
-
-        if found_positions.is_empty() {
-            for (seq_name, genome_sequence) in genome_map {
-                if seq_name == &original_sequence_id {
-                    continue;
-                }
-                found_positions.extend(boyer_moore_search(genome_sequence, pattern)
-                    .into_iter()
-                    .map(|pos| (pos, '+', seq_name.clone())));
-
-                found_positions.extend(boyer_moore_search(genome_sequence, &rev_complement_pattern)
-                    .into_iter()
-                    .map(|pos| (pos, '-', seq_name.clone())));
+            if let Some(target_sequence) = genome_map.get(&original_sequence_id) {
+                found_positions.extend(boyer_moore_search(target_sequence, pattern)
+                    .into_iter().map(|pos| (pos, '+', original_sequence_id.clone())));
+                found_positions.extend(boyer_moore_search(target_sequence, &rev_complement_pattern)
+                    .into_iter().map(|pos| (pos, '-', original_sequence_id.clone())));
             }
-        }
 
-        if !found_positions.is_empty() {
-            let pat_len = pattern.len();
+            if found_positions.is_empty() {
+                for (seq_name, genome_sequence) in genome_map {
+                    if seq_name == &original_sequence_id { continue; }
+                    found_positions.extend(boyer_moore_search(genome_sequence, pattern)
+                        .into_iter().map(|pos| (pos, '+', seq_name.clone())));
+                    found_positions.extend(boyer_moore_search(genome_sequence, &rev_complement_pattern)
+                        .into_iter().map(|pos| (pos, '-', seq_name.clone())));
+                }
+            }
+
             found_positions.sort_by(|a, b| {
-                // 1. Prefer positions not already occupied by another sequence.
-                let a_start = a.0 as u64 + 1;
-                let a_end   = (a.0 + pat_len) as u64;
-                let b_start = b.0 as u64 + 1;
-                let b_end   = (b.0 + pat_len) as u64;
-                let a_occupied = occupied.contains(&(a.2.clone(), a_start, a_end, a.1));
-                let b_occupied = occupied.contains(&(b.2.clone(), b_start, b_end, b.1));
-
-                a_occupied.cmp(&b_occupied)
-                    // 2. Prefer matches on the same sequence as the original.
-                    .then_with(|| {
-                        let a_same = a.2 == original_sequence_id;
-                        let b_same = b.2 == original_sequence_id;
-                        b_same.cmp(&a_same)
-                    })
-                    // 3. Prefer the match closest to the original start coordinate.
+                let a_same = a.2 == original_sequence_id;
+                let b_same = b.2 == original_sequence_id;
+                b_same.cmp(&a_same)
                     .then_with(|| {
                         let dist_a = record.start.map_or(usize::MAX, |start| (a.0 as isize - start as isize).unsigned_abs());
                         let dist_b = record.start.map_or(usize::MAX, |start| (b.0 as isize - start as isize).unsigned_abs());
@@ -762,32 +794,168 @@ pub fn boyer_moore_search_with_validation(
                     .then_with(|| a.1.cmp(&b.1))
             });
 
-            let best_match = &found_positions[0];
-            record.start = Some(best_match.0 as u64 + 1);
-            record.end = Some((best_match.0 + pattern.len()) as u64);
-            record.orient = Some(best_match.1);
-            record.sequence_id = best_match.2.clone();
-            record.assembly_id = remapped_assembly.map(|s| s.to_string());
-            record.validated = Some(if found_positions.len() == 1 {
-                "fixed_remapped_unique".to_string()
-            } else {
-                "fixed_remapped_ambig".to_string()
-            });
+            progress.inc(1);
+            (idx, found_positions)
+        })
+        .collect();
+
+    progress.finish_and_clear();
+
+    // Phase 2 (sequential, file order): claim positions deterministically.
+    // Earlier records in the file get first pick; later ones are steered away
+    // from already-claimed positions when alternatives exist.
+    all_hits.sort_by_key(|(idx, _)| *idx);
+
+    let mut occupied: std::collections::HashSet<(String, u64, u64, char)> = records
+        .iter()
+        .filter(|r| r.validated.is_some())
+        .filter_map(|r| match (r.start, r.end, r.orient) {
+            (Some(s), Some(e), Some(o)) => Some((r.sequence_id.clone(), s, e, o)),
+            _ => None,
+        })
+        .collect();
+
+    let mut mapped_count = 0usize;
+    for (idx, found_positions) in all_hits {
+        let record = &mut records[idx];
+        if found_positions.is_empty() {
+            continue;
+        }
+        let pat_len = record.sequence.len();
+        let total_hits = found_positions.len();
+
+        let first_free = found_positions.iter().find(|hit| {
+            let s = hit.0 as u64 + 1;
+            let e = (hit.0 + pat_len) as u64;
+            !occupied.contains(&(hit.2.clone(), s, e, hit.1))
+        });
+
+        let chosen = match first_free {
+            Some(hit) => {
+                let s = hit.0 as u64 + 1;
+                let e = (hit.0 + pat_len) as u64;
+                occupied.insert((hit.2.clone(), s, e, hit.1));
+                Some(hit.clone())
+            }
+            None => {
+                if remove_duplicates { None } else { Some(found_positions[0].clone()) }
+            }
+        };
+
+        match chosen {
+            None => {
+                record.validated = Some("removed_remapped_duplicate".to_string());
+            }
+            Some(best) => {
+                record.start = Some(best.0 as u64 + 1);
+                record.end = Some((best.0 + pat_len) as u64);
+                record.orient = Some(best.1);
+                record.sequence_id = best.2.clone();
+                record.assembly_id = remapped_assembly.map(|s| s.to_string());
+                record.validated = Some(if total_hits == 1 {
+                    "fixed_remapped_unique".to_string()
+                } else {
+                    "fixed_remapped_ambig".to_string()
+                });
+                mapped_count += 1;
+            }
         }
 
-        progress.inc(1);
-
         if debug_mode {
-            if let Some(validation) = &record.validated {
-                println!("Boyer-Moore {} fix for record: {:?}", validation, record);
+            if let Some(v) = &record.validated {
+                println!("Boyer-Moore {} fix for record: {:?}", v, record);
             } else {
                 println!("Boyer-Moore failed to fix for record: {:?}", record);
             }
         }
+    }
+    println!("## o Mapping: {}/{} mapped in {:.2}s", mapped_count, invalid_count, t_map.elapsed().as_secs_f32());
+}
 
+/// Sort a hit list for one sequence: hits on the original chromosome first,
+/// then by distance from the original coordinates, then by chromosome name and
+/// position for deterministic tie-breaking.
+fn sort_hits_by_proximity(
+    hits: &mut Vec<(usize, char, String)>,
+    original_seq_id: &str,
+    record_start: Option<u64>,
+) {
+    hits.sort_by(|a, b| {
+        b.2.eq(original_seq_id).cmp(&a.2.eq(original_seq_id))
+            .then_with(|| {
+                let dist_a = record_start.map_or(usize::MAX, |s| (a.0 as isize - s as isize).unsigned_abs());
+                let dist_b = record_start.map_or(usize::MAX, |s| (b.0 as isize - s as isize).unsigned_abs());
+                dist_a.cmp(&dist_b)
+            })
+            .then_with(|| a.2.cmp(&b.2))
+            .then_with(|| a.1.cmp(&b.1))
     });
+}
 
-    progress.finish_and_clear();
+/// Scan every chromosome in `genome_map` for all sequences in `batch_indices`
+/// simultaneously, using a single Aho-Corasick automaton built from all their
+/// patterns (forward + reverse-complement).
+///
+/// This is O(genome_size × num_chromosomes) regardless of how many sequences
+/// are in the batch — orders of magnitude faster than per-sequence whole-genome
+/// searches when many sequences need mapping.
+///
+/// Returns `(record_index, sorted_hits)` for every sequence in the batch.
+fn batch_genome_scan(
+    batch_indices: &[usize],
+    records: &[SequenceRecord],
+    genome_map: &HashMap<String, Vec<u8>>,
+    progress: &ProgressBar,
+) -> Vec<(usize, Vec<(usize, char, String)>)> {
+    if batch_indices.is_empty() {
+        return Vec::new();
+    }
+
+    // Pattern layout: 2k = forward of batch[k], 2k+1 = reverse-complement.
+    let patterns: Vec<Vec<u8>> = batch_indices
+        .iter()
+        .flat_map(|&idx| {
+            let seq = &records[idx].sequence;
+            [seq.clone(), reverse_complement(seq)]
+        })
+        .collect();
+
+    let ac = AhoCorasick::new(patterns.iter().map(|p| p.as_slice()))
+        .expect("failed to build batch Aho-Corasick automaton");
+
+    // Search every chromosome in parallel; collect raw (batch_pos, start, strand, chrom) tuples.
+    let raw_hits: Vec<(usize, usize, char, String)> = genome_map
+        .par_iter()
+        .flat_map_iter(|(chrom_name, chrom_seq)| {
+            let mut local = Vec::new();
+            for m in ac.find_overlapping_iter(chrom_seq) {
+                let pat_idx = m.pattern().as_usize();
+                let batch_pos = pat_idx / 2;
+                let strand = if pat_idx % 2 == 0 { '+' } else { '-' };
+                local.push((batch_pos, m.start(), strand, chrom_name.clone()));
+            }
+            local
+        })
+        .collect();
+
+    // Group hits by their position within the batch.
+    let mut hits_by_pos: Vec<Vec<(usize, char, String)>> = vec![Vec::new(); batch_indices.len()];
+    for (batch_pos, start, strand, chrom) in raw_hits {
+        if batch_pos < hits_by_pos.len() {
+            hits_by_pos[batch_pos].push((start, strand, chrom));
+        }
+    }
+
+    // Sort each sequence's hits and advance the progress bar.
+    let mut results = Vec::with_capacity(batch_indices.len());
+    for (bp, &idx) in batch_indices.iter().enumerate() {
+        let record = &records[idx];
+        let mut hits = std::mem::take(&mut hits_by_pos[bp]);
+        sort_hits_by_proximity(&mut hits, &record.sequence_id, record.start);
+        results.push((idx, hits));
+        progress.inc(1);
+    }
+    results
 }
 
 /// Aho-Corasick variant of the mapping step.
@@ -801,19 +969,92 @@ pub fn aho_corasick_search_with_validation(
     genome_map: &HashMap<String, Vec<u8>>,
     debug_mode: bool,
     remapped_assembly: Option<&str>,
+    remove_duplicates: bool,
 ) {
-    let invalid_count = records.iter().filter(|r| r.validated.is_none()).count();
-    println!("## o Mapping {} sequences", invalid_count);
+    let invalid_indices: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.validated.is_none())
+        .map(|(i, _)| i)
+        .collect();
+
+    let invalid_count = invalid_indices.len();
+    let t_map = std::time::Instant::now();
     let progress = ProgressBar::new(invalid_count as u64);
     progress.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+            .template("## o Mapping: {spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
             .unwrap()
             .progress_chars("#>-"),
     );
     progress.enable_steady_tick(Duration::from_millis(100));
 
-    let occupied: std::collections::HashSet<(String, u64, u64, char)> = records
+    // Partition: sequences whose chromosome IS in genome_map can use a fast
+    // per-sequence search (they usually hit on their own chromosome right away).
+    // Sequences whose chromosome is NOT in genome_map must scan the whole genome;
+    // batching them lets one Aho-Corasick pass cover BATCH_SIZE sequences at once,
+    // reducing total genome traversals from N×chromosomes to ⌈N/BATCH_SIZE⌉×chromosomes.
+    let (chrom_found, chrom_missing): (Vec<usize>, Vec<usize>) = invalid_indices
+        .iter()
+        .partition(|&&idx| genome_map.contains_key(&records[idx].sequence_id));
+
+    // Phase 1a (parallel by sequence): per-sequence search for records whose
+    // chromosome exists in the genome.  Whole-genome fallback is kept for the
+    // rare case where the target chromosome yields no hit.
+    let mut all_hits: Vec<(usize, Vec<(usize, char, String)>)> = chrom_found
+        .par_iter()
+        .map(|&idx| {
+            let record = &records[idx];
+            let pattern = &record.sequence;
+            let rev_complement_pattern = reverse_complement(pattern);
+            let original_sequence_id = record.sequence_id.clone();
+
+            let ac = AhoCorasick::new([pattern.as_slice(), rev_complement_pattern.as_slice()])
+                .expect("failed to build Aho-Corasick automaton");
+
+            let mut found_positions: Vec<(usize, char, String)> = Vec::new();
+
+            if let Some(target_sequence) = genome_map.get(&original_sequence_id) {
+                for m in ac.find_overlapping_iter(target_sequence) {
+                    let strand = if m.pattern().as_usize() == 0 { '+' } else { '-' };
+                    found_positions.push((m.start(), strand, original_sequence_id.clone()));
+                }
+            }
+
+            if found_positions.is_empty() {
+                for (seq_name, genome_sequence) in genome_map {
+                    if seq_name == &original_sequence_id { continue; }
+                    for m in ac.find_overlapping_iter(genome_sequence) {
+                        let strand = if m.pattern().as_usize() == 0 { '+' } else { '-' };
+                        found_positions.push((m.start(), strand, seq_name.clone()));
+                    }
+                }
+            }
+
+            sort_hits_by_proximity(&mut found_positions, &original_sequence_id, record.start);
+            progress.inc(1);
+            (idx, found_positions)
+        })
+        .collect();
+
+    // Phase 1b: batch whole-genome scan for sequences whose chromosome is absent
+    // from genome_map.  Each batch builds one multi-pattern AC automaton and
+    // searches every chromosome once, so the cost is O(batch_count × genome_size)
+    // rather than O(sequence_count × genome_size).
+    const BATCH_SIZE: usize = 1000;
+    for batch in chrom_missing.chunks(BATCH_SIZE) {
+        let batch_results = batch_genome_scan(batch, records, genome_map, &progress);
+        all_hits.extend(batch_results);
+    }
+
+    progress.finish_and_clear();
+
+    // Phase 2 (sequential, file order): claim positions deterministically.
+    // Earlier records in the file get first pick; later ones are steered away
+    // from already-claimed positions when alternatives exist.
+    all_hits.sort_by_key(|(idx, _)| *idx);
+
+    let mut occupied: std::collections::HashSet<(String, u64, u64, char)> = records
         .iter()
         .filter(|r| r.validated.is_some())
         .filter_map(|r| match (r.start, r.end, r.orient) {
@@ -822,88 +1063,61 @@ pub fn aho_corasick_search_with_validation(
         })
         .collect();
 
-    records.par_iter_mut().filter(|r| r.validated.is_none()).for_each(|record| {
-        let pattern = &record.sequence;
-        let rev_complement_pattern = reverse_complement(pattern);
-        let original_sequence_id = record.sequence_id.clone();
-
-        // Build automaton once; pattern index 0 = forward (+), 1 = revcomp (-).
-        let ac = AhoCorasick::new([pattern.as_slice(), rev_complement_pattern.as_slice()])
-            .expect("failed to build Aho-Corasick automaton");
-
-        let mut found_positions: Vec<(usize, char, String)> = Vec::new();
-
-        // Single-pass dual-strand search on the original chromosome.
-        if let Some(target_sequence) = genome_map.get(&original_sequence_id) {
-            for m in ac.find_overlapping_iter(target_sequence) {
-                let strand = if m.pattern().as_usize() == 0 { '+' } else { '-' };
-                found_positions.push((m.start(), strand, original_sequence_id.clone()));
-            }
-        }
-
-        // Fall back to whole-genome scan if the original chromosome had no hits.
+    let mut mapped_count = 0usize;
+    for (idx, found_positions) in all_hits {
+        let record = &mut records[idx];
         if found_positions.is_empty() {
-            for (seq_name, genome_sequence) in genome_map {
-                if seq_name == &original_sequence_id {
-                    continue;
-                }
-                for m in ac.find_overlapping_iter(genome_sequence) {
-                    let strand = if m.pattern().as_usize() == 0 { '+' } else { '-' };
-                    found_positions.push((m.start(), strand, seq_name.clone()));
-                }
+            continue;
+        }
+        let pat_len = record.sequence.len();
+        let total_hits = found_positions.len();
+
+        let first_free = found_positions.iter().find(|hit| {
+            let s = hit.0 as u64 + 1;
+            let e = (hit.0 + pat_len) as u64;
+            !occupied.contains(&(hit.2.clone(), s, e, hit.1))
+        });
+
+        let chosen = match first_free {
+            Some(hit) => {
+                let s = hit.0 as u64 + 1;
+                let e = (hit.0 + pat_len) as u64;
+                occupied.insert((hit.2.clone(), s, e, hit.1));
+                Some(hit.clone())
+            }
+            None => {
+                if remove_duplicates { None } else { Some(found_positions[0].clone()) }
+            }
+        };
+
+        match chosen {
+            None => {
+                record.validated = Some("removed_remapped_duplicate".to_string());
+            }
+            Some(best) => {
+                record.start = Some(best.0 as u64 + 1);
+                record.end = Some((best.0 + pat_len) as u64);
+                record.orient = Some(best.1);
+                record.sequence_id = best.2.clone();
+                record.assembly_id = remapped_assembly.map(|s| s.to_string());
+                record.validated = Some(if total_hits == 1 {
+                    "fixed_remapped_unique".to_string()
+                } else {
+                    "fixed_remapped_ambig".to_string()
+                });
+                mapped_count += 1;
             }
         }
-
-        if !found_positions.is_empty() {
-            let pat_len = pattern.len();
-            found_positions.sort_by(|a, b| {
-                let a_start = a.0 as u64 + 1;
-                let a_end   = (a.0 + pat_len) as u64;
-                let b_start = b.0 as u64 + 1;
-                let b_end   = (b.0 + pat_len) as u64;
-                let a_occupied = occupied.contains(&(a.2.clone(), a_start, a_end, a.1));
-                let b_occupied = occupied.contains(&(b.2.clone(), b_start, b_end, b.1));
-
-                a_occupied.cmp(&b_occupied)
-                    .then_with(|| {
-                        let a_same = a.2 == original_sequence_id;
-                        let b_same = b.2 == original_sequence_id;
-                        b_same.cmp(&a_same)
-                    })
-                    .then_with(|| {
-                        let dist_a = record.start.map_or(usize::MAX, |start| (a.0 as isize - start as isize).unsigned_abs());
-                        let dist_b = record.start.map_or(usize::MAX, |start| (b.0 as isize - start as isize).unsigned_abs());
-                        dist_a.cmp(&dist_b)
-                    })
-                    .then_with(|| a.2.cmp(&b.2))
-                    .then_with(|| a.1.cmp(&b.1))
-            });
-
-            let best_match = &found_positions[0];
-            record.start = Some(best_match.0 as u64 + 1);
-            record.end = Some((best_match.0 + pattern.len()) as u64);
-            record.orient = Some(best_match.1);
-            record.sequence_id = best_match.2.clone();
-            record.assembly_id = remapped_assembly.map(|s| s.to_string());
-            record.validated = Some(if found_positions.len() == 1 {
-                "fixed_remapped_unique".to_string()
-            } else {
-                "fixed_remapped_ambig".to_string()
-            });
-        }
-
-        progress.inc(1);
 
         if debug_mode {
-            if let Some(validation) = &record.validated {
-                println!("AhoCorasick {} fix for record: {:?}", validation, record);
+            if let Some(v) = &record.validated {
+                println!("AhoCorasick {} fix for record: {:?}", v, record);
             } else {
                 println!("AhoCorasick failed to fix for record: {:?}", record);
             }
         }
-    });
-
-    progress.finish_and_clear();
+    }
+    println!("## o Mapping: {}/{} mapped in {:.2}s", mapped_count, invalid_count, t_map.elapsed().as_secs_f32());
 }
 
 pub fn boyer_moore_search(text: &[u8], pattern: &[u8]) -> Vec<usize> {
@@ -953,14 +1167,17 @@ pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: Strin
             let mut fix_counts = HashMap::new();
             let mut fixed_count = 0;
             for record in records.iter() {
-                if record.validated.is_some() && record.validated.as_deref() != Some("valid") &&
-                   record.validated.as_deref() != Some("invalid") {
-                    fixed_count = fixed_count + 1;
+                let v = record.validated.as_deref();
+                if v.is_some() && v != Some("valid") && v != Some("invalid")
+                    && v != Some("removed_remapped_duplicate")
+                {
+                    fixed_count += 1;
                     *fix_counts.entry(record.validated.clone().unwrap()).or_insert(0) += 1;
                 }
             }
             let valid_count = records.iter().filter(|r| r.validated.as_deref() == Some("valid")).count();
             let invalid_count = records.iter().filter(|r| r.validated.as_deref() == Some("invalid")).count();
+            let removed_dup_count = records.iter().filter(|r| r.validated.as_deref() == Some("removed_remapped_duplicate")).count();
 
             println!("{}:", label);
             println!("  Total Sequences: {}", total_records);
@@ -968,6 +1185,9 @@ pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: Strin
             println!("     Repaired Coordinates: {}", fixed_count);
             for (fix_type, count) in fix_counts {
                 println!("        {}: {}", fix_type, count);
+            }
+            if removed_dup_count > 0 {
+                println!("     Removed Duplicate Sequences: {}", removed_dup_count);
             }
             println!("     Invalid Coordinates: {}", invalid_count);
         }

@@ -143,9 +143,11 @@ impl StkRecord {
 
     /// Serialise the record back to Stockholm format.
     ///
-    /// Always writes a canonical `# STOCKHOLM 1.0` header.  Sequence and
-    /// `#=GC` lines are column-aligned; `#=GC` tags are sorted alphabetically
-    /// for deterministic output.
+    /// Always writes a canonical `# STOCKHOLM 1.0` header.  The `#=GC RF`
+    /// line (when present) is emitted immediately before the sequence rows as
+    /// the last header annotation, regardless of where it appeared in the
+    /// input.  All other `#=GC` lines follow the sequence rows, sorted
+    /// alphabetically for deterministic output.
     pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
         writeln!(w, "# STOCKHOLM 1.0")?;
 
@@ -163,11 +165,17 @@ impl StkRecord {
                 .unwrap_or(0)
                 + 2;
 
+            // RF goes before sequences as the final header line.
+            if let Some(rf) = self.gc.get("RF") {
+                writeln!(w, "{:<width$}{}", "#=GC RF", rf, width = col)?;
+            }
+
             for row in &self.sequences {
                 writeln!(w, "{:<width$}{}", row.original_id, row.aligned_seq, width = col)?;
             }
 
-            let mut gc_tags: Vec<&String> = self.gc.keys().collect();
+            // All other #=GC tags follow the sequences, sorted alphabetically.
+            let mut gc_tags: Vec<&String> = self.gc.keys().filter(|k| k.as_str() != "RF").collect();
             gc_tags.sort();
             for tag in gc_tags {
                 writeln!(
@@ -193,11 +201,19 @@ pub struct StkRecordIter<R: BufRead> {
     line_num: usize,
     record_num: usize,
     done: bool,
+    /// When `false`, sequence rows are stored via `SeqRow::new_raw` — skipping
+    /// Smitten identifier parsing.  Use this for operations that only touch
+    /// `#=GF` fields and never inspect parsed coordinates.
+    parse_sequences: bool,
 }
 
 impl<R: BufRead> StkRecordIter<R> {
     pub fn new(reader: R) -> Self {
-        StkRecordIter { reader, line_num: 0, record_num: 0, done: false }
+        StkRecordIter { reader, line_num: 0, record_num: 0, done: false, parse_sequences: true }
+    }
+
+    pub fn new_raw(reader: R) -> Self {
+        StkRecordIter { reader, line_num: 0, record_num: 0, done: false, parse_sequences: false }
     }
 }
 
@@ -286,7 +302,12 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
             let mut it = trimmed.splitn(2, char::is_whitespace);
             if let (Some(name), Some(seq)) = (it.next(), it.next()) {
                 let seq = seq.trim();
-                record.sequences.push(SeqRow::from_name_seq(name, seq));
+                let row = if self.parse_sequences {
+                    SeqRow::from_name_seq(name, seq)
+                } else {
+                    SeqRow::new_raw(name, seq)
+                };
+                record.sequences.push(row);
             }
         }
     }
@@ -295,6 +316,16 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
 /// Create a streaming record iterator from any `BufRead`.
 pub fn iter_records<R: BufRead>(reader: R) -> StkRecordIter<R> {
     StkRecordIter::new(reader)
+}
+
+/// Like `iter_records` but skips Smitten identifier parsing on sequence rows.
+///
+/// Sequence rows are stored with their original identifier and aligned sequence
+/// intact, but the parsed coordinate fields are left empty.  Use this for
+/// operations that only read or write `#=GF` annotations and never inspect
+/// sequence coordinates.
+pub fn iter_records_raw<R: BufRead>(reader: R) -> StkRecordIter<R> {
+    StkRecordIter::new_raw(reader)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

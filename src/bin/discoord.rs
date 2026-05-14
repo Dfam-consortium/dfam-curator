@@ -47,10 +47,18 @@ struct Args {
     /// Generate a new output file per input file in this directory (or <input_file>.discoord if ".")
     #[arg(short = 'o', long)]
     output_dir: Option<String>,
+
+    /// When mapping, remove a sequence if every genomic hit for it is already
+    /// occupied by an earlier sequence in the file.  Sequences with at least one
+    /// unoccupied hit are kept and assigned to that position as usual.
+    /// Removed sequences are reported as "removed_remapped_duplicate" in the summary.
+    #[arg(short = 'u', long, default_value = "false")]
+    remove_duplicates: bool,
 }
 
 fn main() {
     let args = Args::parse();
+    let t_start = Instant::now();
     let debug_mode = false;
     let mut validation_failed = false;
 
@@ -155,7 +163,7 @@ fn main() {
             let t = Instant::now();
             let genome_map = load_reference(&ref_file).expect("Failed to load reference");
             println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
-            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref());
+            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);
             for record in results.iter_mut() {
                 if record.validated.is_none() {
                     record.validated = Some("invalid".to_string());
@@ -173,7 +181,7 @@ fn main() {
         let genome_map = load_reference(ref_default).expect("Failed to load default reference");
         println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
         let all_sequences: Vec<SequenceRecord> = sequences_by_assembly.into_values().flatten().collect();
-        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref());
+        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);
         for record in results.iter_mut() {
             if record.validated.is_none() {
                 record.validated = Some("invalid".to_string());
@@ -186,6 +194,10 @@ fn main() {
     }
 
     processed_sequences.sort_by_key(|record| (record.input_file.clone(), record.order));
+
+    let elapsed = t_start.elapsed();
+    let total_secs = elapsed.as_secs();
+    println!("## Total runtime: {:02}:{:02}:{:02}", total_secs / 3600, (total_secs % 3600) / 60, total_secs % 60);
 
     for input_file in &args.input {
         let input_path = Path::new(input_file);
@@ -225,16 +237,20 @@ fn main() {
             .cloned()
             .collect();
 
-        println!();
         output_results(&records, args.log_level.clone(), format!("Summary for {}", input_file));
         if args.output_dir.is_some() && !output_file.is_empty() {
+            let output_records: Vec<SequenceRecord> = records
+                .iter()
+                .filter(|r| r.validated.as_deref() != Some("removed_remapped_duplicate"))
+                .cloned()
+                .collect();
             match format {
-                "Fasta" => write_fasta_output(&records, &all_metadata, &output_file, is_gzip, false)
+                "Fasta" => write_fasta_output(&output_records, &all_metadata, &output_file, is_gzip, false)
                     .expect("Failed to write output"),
-                "Stockholm" => write_stockholm_output(&records, &all_metadata, &output_file, is_gzip, false)
+                "Stockholm" => write_stockholm_output(&output_records, &all_metadata, &output_file, is_gzip, false)
                     .expect("Failed to write output"),
                 "TabDelimited" | "CommaDelimited" => {
-                    write_delimited_output(&records, &output_file, is_gzip, false, format)
+                    write_delimited_output(&output_records, &output_file, is_gzip, false, format)
                         .expect("Failed to write output")
                 }
                 _ => {

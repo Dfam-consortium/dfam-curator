@@ -8,15 +8,19 @@
 /// Exit status for `edit`: 0 = success, 2 = I/O failure.
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use regex::Regex;
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
-use dfam_curator::dfam::{
-    cache::{cache_dir, load_cache, missing_cache_files},
-    edit::{apply_ops, Op},
-    lint::{check_duplicate_ids, lint_record, Diagnostic, Severity},
-    record::{iter_records, RawDfamRecord},
+use dfam_curator::{
+    consensus::{build_consensus_from_sequences, ConsensusParams},
+    dfam::{
+        cache::{cache_dir, load_cache, missing_cache_files},
+        edit::{apply_ops, Op},
+        lint::{check_duplicate_ids, lint_record, Diagnostic, Severity},
+        record::{iter_records, iter_records_raw, RawDfamRecord},
+    },
 };
 
 // ── Top-level CLI ─────────────────────────────────────────────────────────────
@@ -288,15 +292,26 @@ fn run_extract(args: ExtractArgs) -> anyhow::Result<()> {
 
 #[derive(Args, Debug)]
 #[command(
-    after_help = "Operations are applied in a fixed sequence: --delete first, \
-                  then --set, then --append.  This ensures that \
-                  '--delete AU --set AU \"New\"' always produces the expected result.\n\n\
+    after_help = "Operations are applied in a fixed sequence: --delete, then --set, \
+                  then --append, then --sub.  Running --sub last means it transforms \
+                  values however they arrived — pre-existing, set, or appended.\n\n\
+                  --sub EXPR format: /PATTERN/REPLACEMENT/[g]\n  \
+                  The first character is the delimiter (any character works, e.g. |…|…|).\n  \
+                  Omit the trailing /g to replace only the first match within each value;\n  \
+                  add /g to replace every match.  For multi-valued fields (OC, CC) the \
+                  substitution is applied to each line independently.\n  \
+                  Capture groups use $1, $2, … in the replacement.\n\n\
                   Examples:\n  \
                   stk edit --set AU \"Hubley R\" families.stk\n  \
                   stk edit --delete SE --set DE \"Updated desc\" families.stk\n  \
                   stk edit --select MyFam --append OC \"Mus musculus\" families.stk\n  \
                   stk edit --select 3 --set AU \"Hubley R\" families.stk\n  \
-                  stk edit --set AU \"Hubley R\" -o fixed.stk families.stk"
+                  stk edit --set AU \"Hubley R\" -o fixed.stk families.stk\n  \
+                  stk edit --sub ID \"/^(.*)-$/$1/\" families.stk\n  \
+                  stk edit --sub DE \"/foo/bar/g\" families.stk\n  \
+                  stk edit --set ID \"new-\" --sub ID \"/^(.*)-$/$1/\" families.stk\n  \
+                  stk edit --update-consensus families.stk\n  \
+                  stk edit --select MyFam --update-consensus families.stk"
 )]
 struct EditArgs {
     /// Set (or add) a GF field, replacing any existing occurrences.
@@ -316,6 +331,22 @@ struct EditArgs {
     #[arg(long = "append", value_names = ["TAG", "VALUE"], num_args = 2,
           action = clap::ArgAction::Append)]
     append: Vec<String>,
+
+    /// Apply a regex substitution to all values of a GF tag.
+    /// Format: /PATTERN/REPLACEMENT/[g]  (first char is delimiter; /g = replace all matches).
+    /// Capture groups use $1, $2, … in the replacement.
+    /// May be specified multiple times: --sub ID "/^(.*)-$/$1/" --sub DE "/old/new/"
+    #[arg(long = "sub", value_names = ["TAG", "EXPR"], num_args = 2,
+          action = clap::ArgAction::Append)]
+    sub: Vec<String>,
+
+    /// Recompute the #=GC RF consensus from the aligned sequences.
+    /// Because this loads all sequences into MSA data structures it is more
+    /// expensive than plain field edits, so it must be requested explicitly.
+    /// The new consensus is written as the #=GC RF line; any existing RF value
+    /// is replaced.
+    #[arg(long)]
+    update_consensus: bool,
 
     /// Only edit records matching SELECT.
     /// A purely numeric value selects by 1-based record number (e.g. --select 3).
@@ -353,8 +384,75 @@ fn record_selected(record: &RawDfamRecord, select: &str) -> bool {
     }
 }
 
+/// Parse a substitution expression of the form `DELIM PATTERN DELIM REPLACEMENT DELIM [g]`.
+/// The delimiter is the first character of the string (typically `/` or `|`).
+/// Returns `(pattern, replacement, all)`.
+fn parse_sub_expr(expr: &str) -> anyhow::Result<(Regex, String, bool)> {
+    let mut chars = expr.chars();
+    let delim = chars
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("substitution expression is empty"))?;
+
+    // Split the remainder on the delimiter.  We need exactly three parts:
+    // pattern, replacement, flags (flags may be empty).
+    let rest = &expr[delim.len_utf8()..];
+    let parts: Vec<&str> = rest.splitn(3, delim).collect();
+    if parts.len() != 3 {
+        anyhow::bail!(
+            "substitution expression {:?} must have the form {}PAT{}REPL{}[g]",
+            expr, delim, delim, delim
+        );
+    }
+    let (pattern_str, replacement, flags) = (parts[0], parts[1], parts[2]);
+
+    for c in flags.chars() {
+        if c != 'g' {
+            anyhow::bail!("unknown flag {:?} in substitution {:?}", c, expr);
+        }
+    }
+    let all = flags.contains('g');
+
+    let pattern = Regex::new(pattern_str)
+        .with_context(|| format!("invalid regex {:?} in substitution {:?}", pattern_str, expr))?;
+
+    Ok((pattern, replacement.to_string(), all))
+}
+
+/// Rebuild the `#=GC RF` line from the aligned sequences in `record`.
+///
+/// All sequence rows are treated as instances and fed to the CpG-aware
+/// consensus caller.  Does nothing when the record has no sequence rows.
+fn update_rf_consensus(record: &mut RawDfamRecord) {
+    let sequences = &record.sequences[..];
+    if sequences.is_empty() {
+        return;
+    }
+
+    // Normalize '.' -> '-' so the consensus caller treats them as gaps,
+    // matching what the MultiAlign reader does when loading STK files.
+    let owned: Vec<Vec<u8>> = sequences
+        .iter()
+        .map(|row| {
+            row.aligned_seq
+                .bytes()
+                .map(|b| if b == b'.' { b'-' } else { b })
+                .collect()
+        })
+        .collect();
+    let seq_refs: Vec<&[u8]> = owned.iter().map(|v| v.as_slice()).collect();
+
+    let params = ConsensusParams::default();
+    let consensus = build_consensus_from_sequences(&seq_refs, &params);
+
+    // Use '.' for gap positions — Stockholm convention for the RF line.
+    let cons_str: String = consensus.into_iter()
+        .map(|b| if b == b'-' { '.' } else { b as char })
+        .collect();
+    record.gc.insert("RF".to_string(), cons_str);
+}
+
 fn run_edit(args: EditArgs) -> anyhow::Result<()> {
-    // Build the operation list.  --set and --append consume 2 values each.
+    // Build the operation list.  --set, --append, and --sub consume 2 values each.
     let mut ops: Vec<Op> = Vec::new();
     for pair in args.delete.iter() {
         ops.push(Op::Delete { tag: pair.clone() });
@@ -365,11 +463,15 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
     for pair in args.append.chunks_exact(2) {
         ops.push(Op::Append { tag: pair[0].clone(), value: pair[1].clone() });
     }
+    for pair in args.sub.chunks_exact(2) {
+        let (pattern, replacement, all) = parse_sub_expr(&pair[1])?;
+        ops.push(Op::Sub { tag: pair[0].clone(), pattern, replacement, all });
+    }
 
-    if ops.is_empty() {
+    if ops.is_empty() && !args.update_consensus {
         anyhow::bail!(
             "no edit operations given; \
-             specify at least one of --set, --delete, or --append"
+             specify at least one of --set, --delete, --append, --sub, or --update-consensus"
         );
     }
 
@@ -385,7 +487,7 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
         let f = std::fs::File::open(path)
             .with_context(|| format!("cannot open {}", path.display()))?;
 
-        for result in iter_records(BufReader::new(f)) {
+        for result in iter_records_raw(BufReader::new(f)) {
             let mut record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
 
@@ -397,6 +499,9 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
 
             if selected {
                 apply_ops(&mut record, &ops);
+                if args.update_consensus {
+                    update_rf_consensus(&mut record);
+                }
             }
 
             record.write_to(&mut out)?;
