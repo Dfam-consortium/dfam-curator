@@ -104,10 +104,11 @@ OPTIONS:
 
 Exit status: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
 
-Checks include: Stockholm structure, required annotation fields, duplicate IDs,
-taxonomy names, Dfam classification strings, and (with `--genome`) sequence
-coordinate validity. Validation is split into tier-1 (always available) and
-tier-2 (requires a populated cache; see [update-cache](#update-cache)).
+Checks include: Stockholm structure, required annotation fields, record terminator,
+duplicate IDs (with AC-aware severity), RF/consensus agreement, taxonomy names,
+Dfam classification strings, and (with `--genome`) sequence coordinate validity.
+Validation is split into tier-1 (always available) and tier-2 (requires a populated
+cache; see [update-cache](#update-cache)).
 
 ### stk extract
 
@@ -136,7 +137,7 @@ stk extract --select MyFam -o MyFam.stk families.stk
 ### stk edit
 
 Edit `#=GF` annotation fields across records. Operations are applied in a
-fixed order: `--delete` first, then `--set`, then `--append`.
+fixed order: `--delete`, then `--set`, then `--append`, then `--sub`.
 
 ```
 USAGE:
@@ -149,17 +150,31 @@ OPTIONS:
     --set <TAG> <VALUE>      Set (or replace) a GF field; repeatable
     --delete <TAG>           Remove all occurrences of a GF tag; repeatable
     --append <TAG> <VALUE>   Append a new GF field (for multi-valued tags); repeatable
+    --sub <TAG> <EXPR>       Apply a regex substitution to all values of a GF tag
+                               Format: /PATTERN/REPLACEMENT/[g]
+                               First char is the delimiter (any char works)
+                               Append /g to replace all matches; omit for first-match only
+                               Capture groups use $1, $2, … in the replacement
+                               For multi-valued fields (OC, CC) applied per line
+    --update-consensus       Recompute the #=GC RF consensus from the aligned sequences
+                               Replaces any existing RF line
     --select <SELECT>        Only edit matching records; others pass through unchanged
                                Numeric value → 1-based record number
                                Non-numeric   → exact #=GF ID match
     -o, --output <FILE>      Write output to FILE instead of stdout
 ```
 
+Operations are applied in a fixed sequence: `--delete`, then `--set`, then `--append`, then `--sub`.
+
 ```sh
 stk edit --set AU "Hubley R" families.stk
 stk edit --delete SE --set DE "Updated description" families.stk
 stk edit --select MyFam --append OC "Mus musculus" families.stk
 stk edit --set AU "Hubley R" -o fixed.stk families.stk
+stk edit --sub ID "/^(.*)-$/$1/" families.stk
+stk edit --sub DE "/foo/bar/g" families.stk
+stk edit --update-consensus families.stk
+stk edit --select MyFam --update-consensus families.stk
 ```
 
 ---
@@ -190,6 +205,10 @@ OPTIONS:
     -x, --threads <N>            Number of threads for parallel processing
     -o, --output-dir <DIR>       Write corrected output files to DIR
                                    Use "." to write alongside each input file
+    -u, --remove-duplicates      When mapping, remove a sequence if every genomic hit is
+                                   already occupied by an earlier sequence in the file.
+                                   Kept sequences are assigned to the first unoccupied hit.
+                                   Removed sequences are reported as "removed_remapped_duplicate"
 ```
 
 ### Coordinate validation
@@ -213,6 +232,10 @@ are searched against the reference genome. The best match is chosen by:
 1. Non-redundancy — avoids a location already occupied by another sequence in the set
 2. Proximity — prefers the same chromosome and start coordinate closest to the original
 3. Uniqueness — reports `fixed_remapped_unique` or `fixed_remapped_ambig`
+
+With `-u` (`--remove-duplicates`), sequences whose every hit is already occupied are
+dropped and reported as `removed_remapped_duplicate` rather than retained at an occupied
+position.
 
 Aho-Corasick (default) searches both strands in a single genome pass;
 Boyer-Moore (`--boyer-moore`) searches each strand separately.
@@ -240,9 +263,11 @@ USAGE:
     update-cache [OPTIONS] [SUBCOMMAND]
 
 SUBCOMMANDS:
-    all         Download all auto-fetchable data, then print instructions for the rest  [default]
-    taxonomy    Download NCBI taxonomy only
-    info        Print instructions for files that must be obtained manually
+    all             Download all data, then show cache status  [default]
+    taxonomy        Download NCBI taxonomy only
+    classifications Download Dfam TP classifications only
+    names           Download Dfam family names only
+    info            Show cache status
 
 OPTIONS:
     --cache-dir <PATH>    Override the cache directory
@@ -250,14 +275,25 @@ OPTIONS:
     --force               Re-download files even if they already exist
 ```
 
-Two files must be placed in the cache directory manually:
+All four cache files are fetched automatically — no manual downloads required:
 
 | File | Source |
 |---|---|
-| `classification.txt` | One Dfam TP classification string per line; obtain from https://dfam.org/classification |
-| `dfam-names.txt` | One Dfam family ID per line; obtain from the families TSV at https://dfam.org/releases |
+| `taxonomy.tsv` | NCBI taxonomy scientific names (from taxdmp.zip) |
+| `taxonomy-common.tsv` | Common name / synonym → scientific name mapping |
+| `classification.tsv` | Dfam TP classification strings (from dfam.org) |
+| `dfam-names.txt` | Dfam family names (from dfam.org) |
 
 Requires `curl` and `unzip` to be available on `PATH`.
+
+---
+
+## Documentation
+
+- **[Dfam_Seeds.md](Dfam_Seeds.md)** — Detailed guide to the Dfam seed alignment format:
+  what a seed record is, the Stockholm 1.0 format, required and optional metadata fields,
+  sequence identifier conventions (Smitten format), and annotated examples ranging from
+  a minimal valid record to a full submission.
 
 ---
 
@@ -266,7 +302,7 @@ Requires `curl` and `unzip` to be available on `PATH`.
 | Crate | Description |
 |---|---|
 | `dfam-stk-io` | Stockholm 1.0 streaming parser, `StkRecord` and `SeqRow` types, Smitten identifier integration |
-| `dfam-coord` | Coordinate validation engine used by `discoord`: genome loading (FASTA / .2bit), range checking, offset correction, and sequence mapping |
+| `dfam-coord` | Coordinate validation engine used by `discoord`: genome loading (FASTA / .2bit), range checking, offset correction, sequence mapping, and Stockholm/FASTA/delimited I/O |
 
 ---
 
