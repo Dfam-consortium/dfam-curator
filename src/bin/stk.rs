@@ -192,9 +192,9 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
 ///   wrong strand).  The status string describes the repair applied.
 /// - `seq_coord_invalid`: the sequence_id is present in the reference but the
 ///   sequence could not be located within ±3 bp in either orientation.
-///
-/// Sequences whose `sequence_id` is absent from the reference are silently
-/// skipped (they likely belong to a different assembly).
+/// - `seq_id_not_in_ref`: one or more sequence identifiers were not found in
+///   the reference at all; reported as a single per-record summary so that a
+///   completely mismatched genome does not flood the output.
 fn coord_lint(
     record: &RawDfamRecord,
     genome_map: &HashMap<String, Vec<u8>>,
@@ -203,6 +203,8 @@ fn coord_lint(
     dfam_coord::validate_sequences(&mut seq_records, genome_map, false);
 
     let mut diags = Vec::new();
+    let mut missing_count: usize = 0;
+    let mut first_missing: Option<String> = None;
     for sr in &seq_records {
         let orig = sr.original_id.as_deref().unwrap_or("?");
         match sr.validated.as_deref() {
@@ -224,8 +226,26 @@ fn coord_lint(
                     ),
                 });
             }
+            None => {
+                if first_missing.is_none() {
+                    first_missing = Some(orig.to_string());
+                }
+                missing_count += 1;
+            }
             _ => {}
         }
+    }
+    if missing_count > 0 {
+        let example = first_missing.unwrap_or_default();
+        diags.push(Diagnostic {
+            severity: Severity::Warn,
+            check: "seq_id_not_in_ref",
+            message: format!(
+                "sequence {:?} identifier not found in reference genome \
+                 ({}/{} sequences total); wrong assembly?",
+                example, missing_count, seq_records.len()
+            ),
+        });
     }
     diags
 }

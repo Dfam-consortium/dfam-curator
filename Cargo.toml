@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "dfam-curator"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "Dfam-centric MSA curation library and toolkit"
 autobins = false
