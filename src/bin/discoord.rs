@@ -161,7 +161,10 @@ fn main() {
             let ref_file = find_reference_file(ref_dir, &assembly_id, &args.reference_default);
             print!("## o Loading reference: {} ... ", ref_file);
             let t = Instant::now();
-            let genome_map = load_reference(&ref_file).expect("Failed to load reference");
+            let genome_map = load_reference(&ref_file).unwrap_or_else(|e| {
+                eprintln!("## Error: Could not open reference file '{}': {}", ref_file, e);
+                std::process::exit(1);
+            });
             println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
             let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);
             for record in results.iter_mut() {
@@ -178,7 +181,10 @@ fn main() {
         // many distinct assembly_id prefixes appear in the input identifiers.
         print!("## o Loading reference: {} ... ", ref_default);
         let t = Instant::now();
-        let genome_map = load_reference(ref_default).expect("Failed to load default reference");
+        let genome_map = load_reference(ref_default).unwrap_or_else(|e| {
+            eprintln!("## Error: Could not open reference file '{}': {}", ref_default, e);
+            std::process::exit(1);
+        });
         println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
         let all_sequences: Vec<SequenceRecord> = sequences_by_assembly.into_values().flatten().collect();
         let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);

@@ -126,11 +126,13 @@ Notes on this example:
   This encoding supports both clade level assignment as well as evidence for 
   horizontal transfer.
 - The publication information currently supports PMID identifiers only.  To specify a
-  publication simply provide the order identifier tag `RN` followed by the PMID identifier
-  tag `RM` as shown above.  Additional publications may be encoded with `RN [2]` and so 
-  on.  Dfam will soon be replacing the pubmed specification with a DOI one.  Once a family
-  has been accepted to Dfam additional fields will be automatically populated with 
-  publication title, authors etc (`RT`, `RA`, `RL`).
+  publication provide `RN` (the reference-order tag) **first**, followed immediately by
+  `RM` (the PubMed ID).  `RN` must precede all other fields in its block — `stk lint`
+  will report an error if that ordering is violated, and `stk edit --set` will reorder
+  fields automatically.  Additional publications may be encoded with `RN [2]` and so on.
+  Dfam will soon be replacing the PubMed specification with a DOI one.  Once a family
+  has been accepted to Dfam additional fields will be automatically populated with
+  publication title, authors, and journal (`RT`, `RA`, `RL`).
 - The RF line contains the consensus for the three sequences, and is called using specific
   consensus caller used by Dfam ( found in the dfam-curator toolkit ).
 - Sequence names follow the Smitten format (assembly accession, sequence identifier, coordinates,
@@ -305,13 +307,17 @@ reference number in brackets), followed by:
 
 | Tag | Meaning             |
 |-----|---------------------|
-| `RN` | Reference number (e.g. `[1]`) |
-| `RM` | PubMed ID           |
+| `RN` | Reference number (e.g. `[1]`) — **must come first** |
+| `RM` | PubMed ID (required)           |
 | `RT` | Title               |
 | `RA` | Author(s)           |
 | `RL` | Journal and volume  |
 
-`RN` and `RM` must appear together — `stk lint` will warn if one is present without the other.
+`RN` must be the first line in each reference block, followed by `RM` (required), then
+optionally `RT`, `RA`, and `RL` in that order.  `stk lint` will report an error if any
+of `RM`/`RT`/`RA`/`RL` appears before the `RN` line, and a warning if `RN` or `RM` is
+present without the other.  `stk edit --set` will automatically reorder fields into the
+correct sequence if they are supplied out of order.
 
 ### `DR` — Database cross-reference
 

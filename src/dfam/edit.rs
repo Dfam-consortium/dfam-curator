@@ -22,6 +22,57 @@ pub enum Op {
     Sub { tag: String, pattern: Regex, replacement: String, all: bool },
 }
 
+const REF_TAGS: &[&str] = &["RN", "RM", "RT", "RA", "RL"];
+const REF_WITHIN_GROUP_ORDER: &[&str] = &["RN", "RM", "RT", "RA", "RL"];
+
+/// Reorder reference block fields in `gf` so that each `RN` precedes its
+/// associated `RM`/`RT`/`RA`/`RL` lines.  Non-reference fields are untouched.
+/// Fields are re-inserted at the position of the first reference field found.
+fn normalize_ref_blocks(gf: &mut Vec<(String, String)>) {
+    let positions: Vec<usize> = (0..gf.len())
+        .filter(|&i| REF_TAGS.contains(&gf[i].0.as_str()))
+        .collect();
+
+    if positions.len() < 2 {
+        return;
+    }
+
+    // Group ref fields: accumulate into a group; start a new group each time
+    // a second (or later) RN is seen.  Orphaned RM/RT/RA/RL before the first
+    // RN are collected into the same group as that RN and sorted to follow it.
+    let ref_fields: Vec<(String, String)> = positions.iter().map(|&i| gf[i].clone()).collect();
+
+    let mut groups: Vec<Vec<(String, String)>> = Vec::new();
+    let mut current: Vec<(String, String)> = Vec::new();
+    let mut seen_rn = false;
+
+    for field in ref_fields {
+        if field.0 == "RN" {
+            if seen_rn {
+                current.sort_by_key(|(t, _)| {
+                    REF_WITHIN_GROUP_ORDER.iter().position(|&o| o == t.as_str()).unwrap_or(99)
+                });
+                groups.push(std::mem::take(&mut current));
+            }
+            seen_rn = true;
+        }
+        current.push(field);
+    }
+    if !current.is_empty() {
+        current.sort_by_key(|(t, _)| {
+            REF_WITHIN_GROUP_ORDER.iter().position(|&o| o == t.as_str()).unwrap_or(99)
+        });
+        groups.push(current);
+    }
+
+    let reordered: Vec<(String, String)> = groups.into_iter().flatten().collect();
+    let insert_pos = positions[0];
+    gf.retain(|(t, _)| !REF_TAGS.contains(&t.as_str()));
+    for (i, field) in reordered.into_iter().enumerate() {
+        gf.insert(insert_pos + i, field);
+    }
+}
+
 /// Apply a slice of operations to `record` in order.
 ///
 /// Operations are applied in the following fixed sequence regardless of
@@ -74,6 +125,8 @@ pub fn apply_ops(record: &mut RawDfamRecord, ops: &[Op]) {
             }
         }
     }
+
+    normalize_ref_blocks(&mut record.gf);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -255,5 +308,31 @@ mod tests {
         }]);
         assert!(gf(&r, "ID").is_empty());
         assert_eq!(gf(&r, "DE"), ["desc"]);
+    }
+
+    #[test]
+    fn set_rm_then_rn_reorders_to_rn_first() {
+        let mut r = make(&[("AU", "Smith J")]);
+        apply_ops(&mut r, &[
+            Op::Set { tag: "RM".into(), value: "12345".into() },
+            Op::Set { tag: "RN".into(), value: "[1]".into() },
+        ]);
+        let tags: Vec<&str> = r.gf.iter().map(|(t, _)| t.as_str()).collect();
+        let rn_pos = tags.iter().position(|&t| t == "RN").unwrap();
+        let rm_pos = tags.iter().position(|&t| t == "RM").unwrap();
+        assert!(rn_pos < rm_pos, "RN must precede RM; got tags: {:?}", tags);
+    }
+
+    #[test]
+    fn two_ref_blocks_already_correct_unchanged() {
+        let mut r = make(&[
+            ("RN", "[1]"), ("RM", "111"),
+            ("RN", "[2]"), ("RM", "222"),
+        ]);
+        apply_ops(&mut r, &[]);
+        let tags: Vec<&str> = r.gf.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, ["RN", "RM", "RN", "RM"]);
+        let vals: Vec<&str> = r.gf.iter().map(|(_, v)| v.as_str()).collect();
+        assert_eq!(vals, ["[1]", "111", "[2]", "222"]);
     }
 }

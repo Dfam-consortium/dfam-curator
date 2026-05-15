@@ -356,6 +356,21 @@ fn check_ref_blocks(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     if has_rm && !has_rn {
         d.push(warn("ref_block_incomplete", "RM is present but no RN (reference number) found"));
     }
+
+    // RM/RT/RA/RL must follow their RN line.
+    const NEEDS_RN: &[&str] = &["RM", "RT", "RA", "RL"];
+    let mut seen_rn = false;
+    for (tag, _) in &r.gf {
+        if tag == "RN" {
+            seen_rn = true;
+        } else if NEEDS_RN.contains(&tag.as_str()) && !seen_rn {
+            d.push(err(
+                "ref_block_order",
+                format!("{} appears before RN; RN must precede all publication fields", tag),
+            ));
+            break;
+        }
+    }
 }
 
 fn check_rf(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
@@ -1050,5 +1065,27 @@ s1          ACGT\n\
         let diags = check_duplicate_ids(&[r1, r2]);
         assert!(diags.iter().all(|d| d.severity == Severity::Info));
         assert!(diags.iter().all(|d| d.check == "duplicate_id_update"));
+    }
+
+    #[test]
+    fn rm_before_rn_is_error() {
+        let r = make_record(
+            &[("AU","x"),("RM","12345"),("RN","[1]")],
+            None,
+            &[],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "ref_block_order"), "{:?}", diags);
+    }
+
+    #[test]
+    fn rn_before_rm_is_ok() {
+        let r = make_record(
+            &[("AU","x"),("RN","[1]"),("RM","12345")],
+            None,
+            &[],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "ref_block_order"), "{:?}", diags);
     }
 }
