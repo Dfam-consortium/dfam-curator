@@ -22,10 +22,39 @@ along with a library of shared alignment and consensus-calling routines.
 Requires a recent stable [Rust toolchain](https://rustup.rs).
 
 ```sh
+git clone https://github.com/Dfam-consortium/dfam-curator.git
+cd dfam-curator
 cargo build --release
 ```
 
 Compiled binaries are placed in `target/release/`.
+
+---
+
+## Quick Start
+
+Initialize the dfam-curator data cache.  This stores reference data from the
+NCBI Taxonomy, and the Dfam database used to validate new submissions.
+
+```sh
+./target/release/update-cache
+```
+
+Validate metadata in a Stockholm file of TE families that are ready for submission to Dfam:
+
+```sh
+./target/release/stk lint myfile.stk
+```
+
+A more rigorous validation involves checking that the sequence identifiers and sequences
+in the Stockholm MSA can be mapped back to an assembly file.  To perform this validation:
+
+```sh
+./target/release/stk lint --genome myassembly.fa myfile.stk
+```
+
+Basic STK editing of metadata is provided using the `stk edit` command.  For more information
+use '-h' with any of these subcommands.
 
 ---
 
