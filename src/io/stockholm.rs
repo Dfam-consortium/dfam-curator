@@ -66,14 +66,24 @@ fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
         let prefix = &name[..colon];
         let coords = &name[colon + 1..];
         if let Some(dash) = coords.find('-') {
-            let (s, e) = (&coords[..dash], &coords[dash + 1..]);
+            let (s, e_raw) = (&coords[..dash], &coords[dash + 1..]);
+            // Optional _+ / _- strand suffix (standard Smitten/Dfam format).
+            // When present, coords are always low-to-high so we read orientation
+            // from the suffix.  Without the suffix we fall back to the old
+            // RepeatModeler convention where start > end signals reverse strand.
+            let e = e_raw.trim_end_matches(|c: char| c == '+' || c == '-')
+                         .trim_end_matches('_');
             if let (Ok(a), Ok(b)) = (s.parse::<u64>(), e.parse::<u64>()) {
-                let (seq_start, seq_end, orient) = if a > b {
-                    (b, a, Orientation::Reverse)
+                let orient = if e_raw.ends_with("_-") {
+                    Orientation::Reverse
+                } else if e_raw.ends_with("_+") {
+                    Orientation::Forward
+                } else if a > b {
+                    Orientation::Reverse
                 } else {
-                    (a, b, Orientation::Forward)
+                    Orientation::Forward
                 };
-                return (prefix.to_string(), seq_start, seq_end, orient);
+                return (prefix.to_string(), a.min(b), a.max(b), orient);
             }
         }
     }

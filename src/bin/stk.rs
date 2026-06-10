@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use dfam_curator::{
     consensus::{build_consensus_from_sequences, ConsensusParams},
     dfam::{
-        cache::{cache_dir, load_cache, missing_cache_files},
+        cache::{cache_dir, load_cache, missing_cache_files, refresh_cache, RefreshMode},
         edit::{apply_ops, Op},
         lint::{check_duplicate_ids, lint_record, Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
@@ -51,8 +51,8 @@ enum Cmd {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Cmd::Lint(args) => run_lint(args),
-        Cmd::Edit(args) => run_edit(args),
+        Cmd::Lint(args)    => run_lint(args),
+        Cmd::Edit(args)    => run_edit(args),
         Cmd::Extract(args) => run_extract(args),
     }
 }
@@ -95,6 +95,12 @@ struct LintArgs {
     #[arg(long)]
     no_cache_warn: bool,
 
+    /// Force-download all tier-2 cache files unconditionally before linting,
+    /// ignoring the 60-day staleness threshold and skipping curl's conditional
+    /// GET (-z).  Useful when you know the Dfam or NCBI data has changed.
+    #[arg(long)]
+    force_update_cache: bool,
+
     /// Reference genome (FASTA or .2bit) for coordinate validation.
     /// When provided, each sequence row's coordinates are checked against the
     /// reference.  Fixable issues (half-open intervals, small shifts, wrong
@@ -107,6 +113,10 @@ struct LintArgs {
 fn run_lint(args: LintArgs) -> anyhow::Result<()> {
     let min_sev: Severity = args.min_severity.into();
     let cdir = args.cache_dir.unwrap_or_else(cache_dir);
+
+    let mode = if args.force_update_cache { RefreshMode::Force } else { RefreshMode::Auto };
+    refresh_cache(&cdir, mode);
+
     let cache = load_cache(&cdir);
 
     if !args.no_cache_warn {

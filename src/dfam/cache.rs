@@ -14,6 +14,87 @@ use std::collections::{HashMap, HashSet};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
+use crate::dfam::fetch::{
+    fetch_dfam_file, fetch_taxonomy, is_stale,
+    CACHE_MAX_AGE_DAYS, DFAM_CLASS_URL, DFAM_NAMES_URL,
+};
+
+/// Controls how `refresh_cache` decides whether to fetch each file.
+pub enum RefreshMode {
+    /// Check mtime; if older than `CACHE_MAX_AGE_DAYS`, use `curl -z`.
+    Auto,
+    /// Always force-download unconditionally, ignoring age and `curl -z`.
+    Force,
+}
+
+/// Attempt to refresh cache files according to `mode`.
+///
+/// Creates the cache directory if it does not exist. Network and fetch
+/// failures are reported to stderr and do not propagate — callers continue
+/// with whatever cached data is available.
+pub fn refresh_cache(dir: &Path, mode: RefreshMode) {
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        eprintln!(
+            "WARN  [cache] cannot create cache directory {}: {e}",
+            dir.display()
+        );
+        return;
+    }
+
+    let force = matches!(mode, RefreshMode::Force);
+
+    refresh_one(
+        "classification.tsv",
+        || fetch_dfam_file(DFAM_CLASS_URL, &dir.join("classification.tsv"), force),
+        force || is_stale(&dir.join("classification.tsv"), CACHE_MAX_AGE_DAYS),
+        force,
+    );
+
+    refresh_one(
+        "dfam-names.txt",
+        || fetch_dfam_file(DFAM_NAMES_URL, &dir.join("dfam-names.txt"), force),
+        force || is_stale(&dir.join("dfam-names.txt"), CACHE_MAX_AGE_DAYS),
+        force,
+    );
+
+    // taxonomy.tsv + taxonomy-common.tsv share one download
+    let tax_stale = force
+        || is_stale(&dir.join("taxonomy.tsv"), CACHE_MAX_AGE_DAYS)
+        || is_stale(&dir.join("taxonomy-common.tsv"), CACHE_MAX_AGE_DAYS);
+    if tax_stale {
+        if force {
+            eprintln!("Cache: taxonomy files — force-downloading (NCBI taxonomy is ~60 MB) ...");
+        } else {
+            eprintln!(
+                "Cache: taxonomy files are stale or missing — checking for update \
+                 (may take a moment, NCBI taxonomy is ~60 MB) ..."
+            );
+        }
+        match fetch_taxonomy(dir, force) {
+            Ok(true)  => eprintln!("Cache: taxonomy files updated."),
+            Ok(false) => eprintln!("Cache: taxonomy files are already up to date."),
+            Err(e)    => eprintln!("WARN  [cache] failed to refresh taxonomy: {e}"),
+        }
+    }
+}
+
+fn refresh_one<F>(name: &str, fetch: F, should: bool, force: bool)
+where
+    F: FnOnce() -> anyhow::Result<bool>,
+{
+    if !should { return; }
+    if force {
+        eprintln!("Cache: {name} — force-downloading ...");
+    } else {
+        eprintln!("Cache: {name} is stale or missing — checking for update ...");
+    }
+    match fetch() {
+        Ok(true)  => eprintln!("Cache: {name} updated."),
+        Ok(false) => eprintln!("Cache: {name} is already up to date."),
+        Err(e)    => eprintln!("WARN  [cache] failed to refresh {name}: {e}"),
+    }
+}
+
 /// Loaded tier-2 validation data.  Each field is `None` when the
 /// corresponding cache file is absent.
 pub struct Cache {

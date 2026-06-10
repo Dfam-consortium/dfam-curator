@@ -23,3 +23,13 @@ notebook
 
 # Test and benchmark scratch files
 *.discoord
+
+# Local working/test files (genomes and scratch STKs at repo root)
+/*.2bit
+/*.stk
+
+# Backup directories
+dfam-coord.backup/
+
+# Large example datasets not tracked in git
+examples/some_discordance/

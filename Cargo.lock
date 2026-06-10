@@ -360,7 +360,7 @@ dependencies = [
 
 [[package]]
 name = "dfam-curator"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1180,7 +1180,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "smitten"
 version = "0.1.1"
-source = "git+https://github.com/Dfam-consortium/Smitten.git#0b87b6c05c3fbde2bb5166f853fe18a4d0160f43"
+source = "git+https://github.com/Dfam-consortium/Smitten.git#2bd6be1942e5ac3ef39bd8427aae4be7590f95ea"
 dependencies = [
  "regex",
 ]

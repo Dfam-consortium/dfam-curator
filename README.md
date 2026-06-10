@@ -17,9 +17,20 @@ along with a library of shared alignment and consensus-calling routines.
 
 ---
 
-## Building
+## Installation
 
-Requires a recent stable [Rust toolchain](https://rustup.rs).
+### Pre-built binaries
+
+Download the latest release for your platform from the
+[GitHub releases page](https://github.com/Dfam-consortium/dfam-curator/releases).
+Extract the archive and place the binaries (`linup`, `stk`, `discoord`, `update-cache`)
+somewhere on your `PATH`.
+
+### Build from source
+
+The `main` branch always reflects the current release, so building from source
+is equivalent to installing a release tarball. Requires a recent stable
+[Rust toolchain](https://rustup.rs).
 
 ```sh
 git clone https://github.com/Dfam-consortium/dfam-curator.git
