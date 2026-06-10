@@ -43,7 +43,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           ARCHIVE="dfam-curator-${VERSION}-${{ matrix.target }}.tar.gz"
           cd target/${{ matrix.target }}/release
-          tar czf "../../../${ARCHIVE}" linup stk discoord tsd update-cache
+          tar czf "../../../${ARCHIVE}" linup stk discoord update-cache
           echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
 
       - name: Package (Windows)
@@ -57,7 +57,6 @@ jobs:
             -Path "${BinDir}/linup.exe",
                   "${BinDir}/stk.exe",
                   "${BinDir}/discoord.exe",
-                  "${BinDir}/tsd.exe",
                   "${BinDir}/update-cache.exe" `
             -DestinationPath $ARCHIVE
           echo "ARCHIVE=$ARCHIVE" >> $env:GITHUB_ENV
