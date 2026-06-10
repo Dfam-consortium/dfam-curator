@@ -2,6 +2,7 @@ pub mod crossmatch;
 pub mod fasta;
 pub mod linup_fmt;
 pub mod stockholm;
+pub mod twobit;
 
 use crate::alignment::MultiAlign;
 use crate::build::Reference;
