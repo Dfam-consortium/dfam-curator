@@ -2,11 +2,19 @@
 members = [".", "dfam-coord", "dfam-stk-io"]
 resolver = "2"
 
+[workspace.metadata.dist]
+cargo-dist-version = "0.28.0"
+ci = ["github"]
+installers = []
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
 [package]
 name = "dfam-curator"
 version = "0.4.3"
 edition = "2024"
 description = "Dfam-centric MSA curation library and toolkit"
+license = "CC0-1.0"
+repository = "https://github.com/Dfam-consortium/dfam-curator"
 autobins = false
 
 [lib]
