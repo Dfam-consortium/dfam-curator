@@ -21,6 +21,9 @@ Thumbs.db
 # My notebook
 notebook
 
+# Local reference docs
+how-to-release
+
 # Test and benchmark scratch files
 *.discoord
 
