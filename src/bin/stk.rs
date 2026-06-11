@@ -1,8 +1,9 @@
 /// stk — Dfam Stockholm file toolkit.
 ///
 /// Subcommands:
-///   lint   Validate one or more STK files and report diagnostics.
-///   edit   Modify #=GF annotation fields across records.
+///   lint     Validate one or more STK files and report diagnostics.
+///   edit     Modify #=GF annotation fields across records.
+///   convert  Convert between alignment formats (STK, MSA, raw-seqs, consensus, reference).
 ///
 /// Exit status for `lint`: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
 /// Exit status for `edit`: 0 = success, 2 = I/O failure.
@@ -20,6 +21,10 @@ use dfam_curator::{
         edit::{apply_ops, Op},
         lint::{check_duplicate_ids, lint_record, Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
+    },
+    io::{
+        clustal, detect_format, fasta, read_alignment, stockholm,
+        Format,
     },
 };
 
@@ -46,6 +51,8 @@ enum Cmd {
     Edit(EditArgs),
     /// Extract one or more records from a multi-record STK file.
     Extract(ExtractArgs),
+    /// Convert alignment files between formats.
+    Convert(ConvertArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -54,6 +61,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Lint(args)    => run_lint(args),
         Cmd::Edit(args)    => run_edit(args),
         Cmd::Extract(args) => run_extract(args),
+        Cmd::Convert(args) => run_convert(args),
     }
 }
 
@@ -540,4 +548,276 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
 
     out.flush()?;
     Ok(())
+}
+
+// ── convert subcommand ────────────────────────────────────────────────────────
+
+#[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
+enum OutFormat {
+    /// Stockholm 1.0 (default target).
+    Stk,
+    /// Aligned FASTA / A2M (gapped sequences).
+    Msa,
+    /// Clustal ALN interleaved format.
+    Aln,
+    /// Ungapped FASTA sequences, one entry per instance row.
+    RawSeqs,
+    /// Recalculated consensus sequence(s) as FASTA, one entry per record.
+    Consensus,
+    /// Stored RF / reference line(s) as FASTA (Stockholm input only).
+    Reference,
+}
+
+#[derive(Args, Debug)]
+#[command(
+    about = "Convert alignment files between formats",
+    after_help = "Input format is auto-detected (Stockholm, FASTA/A2M, crossmatch).\n\n\
+                  OUTPUT FORMATS\n  \
+                  stk        Full MSA → Stockholm 1.0 (default target)\n  \
+                  msa        Full MSA → aligned FASTA / A2M (gapped)\n  \
+                  aln        Full MSA → Clustal ALN interleaved\n  \
+                  raw-seqs   Instances → ungapped FASTA, provenance in description\n  \
+                  consensus  Recalculated consensus per record → FASTA\n  \
+                  reference  Stored #=GC RF line per record → FASTA (STK input only)\n\n\
+                  NOTES\n  \
+                  Converting to the same format as the input requires an explicit --to flag.\n  \
+                  --select is only valid for Stockholm input.\n  \
+                  --to reference requires Stockholm input; records without an RF line are skipped.\n\n\
+                  EXAMPLES\n  \
+                  stk convert foo.msa\n  \
+                  stk convert --to aln foo.stk\n  \
+                  stk convert --to msa foo.stk\n  \
+                  stk convert --to consensus families.stk\n  \
+                  stk convert --to reference --select MyFam families.stk\n  \
+                  stk convert --to stk --out round-trip.stk foo.stk"
+)]
+struct ConvertArgs {
+    /// Output format (default: stk).
+    #[arg(long, value_name = "FORMAT")]
+    to: Option<OutFormat>,
+
+    /// Process only the matching record (integer = 1-based record number, string = #=GF ID).
+    /// Only valid for Stockholm input.
+    #[arg(long, value_name = "SELECT")]
+    select: Option<String>,
+
+    /// Write output to FILE instead of stdout.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    out: Option<PathBuf>,
+
+    /// Input alignment file (Stockholm, FASTA/A2M, or crossmatch .align).
+    #[arg(required = true)]
+    input: PathBuf,
+}
+
+fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
+    let fmt = detect_format(&args.input)
+        .with_context(|| format!("cannot detect format of {}", args.input.display()))?;
+
+    let to = args.to.as_ref().unwrap_or(&OutFormat::Stk);
+
+    let same_fmt = match fmt {
+        Format::Stockholm => *to == OutFormat::Stk,
+        Format::Clustal   => *to == OutFormat::Aln,
+        Format::Fasta     => *to == OutFormat::Msa,
+        Format::Crossmatch => false,
+    };
+    if args.to.is_none() && same_fmt {
+        let name = match fmt {
+            Format::Stockholm  => "Stockholm",
+            Format::Clustal    => "Clustal ALN",
+            Format::Fasta      => "FASTA/A2M",
+            Format::Crossmatch => unreachable!(),
+        };
+        anyhow::bail!(
+            "input is already {name}; use --to {flag} for an explicit round-trip, \
+             or specify another output format",
+            name = name,
+            flag = match fmt {
+                Format::Stockholm  => "stk",
+                Format::Clustal    => "aln",
+                Format::Fasta      => "msa",
+                Format::Crossmatch => unreachable!(),
+            }
+        );
+    }
+    if *to == OutFormat::Reference && fmt != Format::Stockholm {
+        anyhow::bail!("--to reference requires Stockholm input");
+    }
+    if args.select.is_some() && fmt != Format::Stockholm {
+        anyhow::bail!("--select only applies to Stockholm input");
+    }
+
+    let mut output: Box<dyn Write> = match &args.out {
+        None => Box::new(BufWriter::new(std::io::stdout())),
+        Some(p) => Box::new(BufWriter::new(
+            std::fs::File::create(p)
+                .with_context(|| format!("cannot create {}", p.display()))?,
+        )),
+    };
+
+    let stem = args
+        .input
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "input".to_string());
+
+    if fmt == Format::Stockholm {
+        convert_stk_input(&args.input, to, args.select.as_deref(), &stem, &mut output)?;
+    } else {
+        let msa = read_alignment(&args.input)
+            .with_context(|| format!("failed to read {}", args.input.display()))?;
+        convert_one_record(&msa, to, None, &stem, 1, &mut output)?;
+    }
+
+    output.flush()?;
+    Ok(())
+}
+
+fn convert_stk_input(
+    path: &std::path::Path,
+    to: &OutFormat,
+    select: Option<&str>,
+    stem: &str,
+    out: &mut Box<dyn Write>,
+) -> anyhow::Result<()> {
+    let f = std::fs::File::open(path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+
+    for result in iter_records(BufReader::new(f)) {
+        let record = result.with_context(|| format!("parse error in {}", path.display()))?;
+
+        if let Some(sel) = select {
+            if !record_selected(&record, sel) {
+                continue;
+            }
+        }
+
+        match to {
+            OutFormat::Stk => {
+                // Lossless round-trip: preserve all GF/GC fields verbatim.
+                record.write_to(out)?;
+            }
+            OutFormat::Reference => {
+                if let Some(rf) = record.gc.get("RF") {
+                    let id = family_fasta_id(&record, stem);
+                    let ungapped: Vec<u8> = rf
+                        .bytes()
+                        .filter(|&b| b != b'-' && b != b'.' && b != b' ')
+                        .collect();
+                    writeln!(out, ">{}", id)?;
+                    out.write_all(&ungapped)?;
+                    writeln!(out)?;
+                }
+                // Records without RF are silently skipped.
+            }
+            _ => {
+                let msa = stockholm::multialign_from_record(&record)
+                    .with_context(|| format!("failed to parse record {} in {}", record.record_num, path.display()))?;
+                let fam_id = family_fasta_id(&record, stem);
+                convert_one_record(&msa, to, Some(&fam_id), stem, record.record_num, out)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Emit one `MultiAlign` in the requested output format.
+///
+/// `fam_id` is used as the FASTA identifier for consensus/reference output and
+/// as the provenance tag in raw-seqs descriptions.  For STK output the
+/// consensus sequence is recomputed and written as `#=GC RF`.
+fn convert_one_record(
+    msa: &dfam_curator::alignment::MultiAlign,
+    to: &OutFormat,
+    fam_id: Option<&str>,
+    stem: &str,
+    record_num: usize,
+    out: &mut Box<dyn Write>,
+) -> anyhow::Result<()> {
+    match to {
+        OutFormat::Stk => {
+            let consensus = compute_consensus(msa);
+            stockholm::write(msa, out, fam_id.or(Some(stem)), Some(&consensus), false)?;
+        }
+        OutFormat::Msa => {
+            let provenance = build_provenance(fam_id, stem, record_num);
+            fasta::write(msa, out, None, Some(&provenance))?;
+        }
+        OutFormat::Aln => {
+            clustal::write(msa, out)?;
+        }
+        OutFormat::RawSeqs => {
+            write_raw_seqs(msa, fam_id, stem, record_num, out)?;
+        }
+        OutFormat::Consensus => {
+            let consensus = compute_consensus(msa);
+            let ungapped: Vec<u8> = consensus.iter()
+                .filter(|&&b| b != b'-' && b != b' ')
+                .copied()
+                .collect();
+            let id = fam_id.map(|s| s.to_string())
+                .unwrap_or_else(|| format!("{}:{}", stem, record_num));
+            writeln!(out, ">{}", id)?;
+            out.write_all(&ungapped)?;
+            writeln!(out)?;
+        }
+        OutFormat::Reference => {
+            // Only reachable for non-STK input, which is blocked upstream.
+            anyhow::bail!("--to reference requires Stockholm input");
+        }
+    }
+    Ok(())
+}
+
+/// Build the provenance string appended to FASTA description fields.
+fn build_provenance(fam_id: Option<&str>, stem: &str, record_num: usize) -> String {
+    match fam_id {
+        Some(id) => format!("{}:{} id={}", stem, record_num, id),
+        None     => format!("{}:{}", stem, record_num),
+    }
+}
+
+/// Write instance sequences as ungapped FASTA with provenance in the description.
+fn write_raw_seqs(
+    msa: &dfam_curator::alignment::MultiAlign,
+    fam_id: Option<&str>,
+    stem: &str,
+    record_num: usize,
+    out: &mut Box<dyn Write>,
+) -> anyhow::Result<()> {
+    let provenance = build_provenance(fam_id, stem, record_num);
+    // Skip index 0 (the reference row); write only instances.
+    for seq in msa.sequences.iter().skip(1) {
+        let ungapped: Vec<u8> = seq.seq.iter()
+            .filter(|&&b| b != b'-' && b != b' ')
+            .copied()
+            .collect();
+        writeln!(out, ">{}  {}", seq.name, provenance)?;
+        out.write_all(&ungapped)?;
+        writeln!(out)?;
+    }
+    Ok(())
+}
+
+fn compute_consensus(msa: &dfam_curator::alignment::MultiAlign) -> Vec<u8> {
+    let seqs: Vec<&[u8]> = msa.sequences[1..].iter().map(|s| s.seq.as_slice()).collect();
+    build_consensus_from_sequences(&seqs, &ConsensusParams::default())
+}
+
+/// Pick the best FASTA identifier for a record: AC > ID > stem:record_num.
+fn family_fasta_id(record: &RawDfamRecord, stem: &str) -> String {
+    if let Some(ac) = record.gf_first("AC") {
+        let ac = ac.trim();
+        if !ac.is_empty() {
+            return ac.to_string();
+        }
+    }
+    if let Some(id) = record.gf_first("ID") {
+        let id = id.trim();
+        if !id.is_empty() {
+            return id.to_string();
+        }
+    }
+    format!("{}:{}", stem, record.record_num)
 }

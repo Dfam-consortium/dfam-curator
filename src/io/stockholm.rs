@@ -54,13 +54,26 @@ pub fn read_select(path: &Path, select: &str) -> io::Result<MultiAlign> {
     ))
 }
 
+/// Convert a parsed `StkRecord` into a `MultiAlign`.
+///
+/// Serialises the record to a temporary buffer and re-parses it, reusing
+/// the same path as `read_select` so coordinate parsing and RF handling are
+/// identical.
+pub fn multialign_from_record(record: &dfam_stk_io::StkRecord) -> io::Result<MultiAlign> {
+    let mut buf = Vec::new();
+    record
+        .write_to(&mut buf)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    parse_record(io::Cursor::new(buf))
+}
+
 /// Parse genomic coordinates from a RepeatModeler-style sequence identifier.
 ///
 /// Recognises `prefix:start-end` (e.g. `gi|57:120437225-120436960`).
 /// When `raw_start > raw_end` the sequence is reverse-strand; seq_start/end are
 /// normalised so that seq_start ≤ seq_end regardless of orientation.
 /// Returns the display name (prefix only), seq_start, seq_end, and orientation.
-/// Falls back to the original name with start=end=1, Forward for unparseable IDs.
+/// Falls back to the original name with start=end=0, Forward for unparseable IDs.
 fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
     if let Some(colon) = name.rfind(':') {
         let prefix = &name[..colon];
@@ -87,7 +100,7 @@ fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
             }
         }
     }
-    (name.to_string(), 1, 1, Orientation::Forward)
+    (name.to_string(), 0, 0, Orientation::Forward)
 }
 
 /// Build a `SequenceRow` from an original Stockholm sequence name + normalised bytes.

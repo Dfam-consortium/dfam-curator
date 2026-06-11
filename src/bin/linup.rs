@@ -1,7 +1,7 @@
-/// linup — MSA viewer and converter (Rust port of RepeatModeler/util/Linup)
+/// linup — MSA viewer (Rust port of RepeatModeler/util/Linup)
 ///
 /// Reads a multiple sequence alignment in Stockholm, FASTA/A2M, or crossmatch
-/// format and outputs it in a requested format with optional trimming / slicing.
+/// format and renders it as a pretty-printed alignment or Stockholm output.
 ///
 /// When --blast-tab is set the input file is treated as rmblastn tabular output
 /// (outfmt: `6 score qseqid qstart qend qlen sstrand sseqid sstart send slen qseq sseq`)
@@ -23,10 +23,6 @@ enum OutFormat {
     Linup,
     /// Stockholm 1.0 with #=GC RF consensus line.
     Stockholm,
-    /// Aligned FASTA / A2M (gaps preserved).
-    Msa,
-    /// Unaligned FASTA (gaps stripped).
-    Fasta,
     /// Print only the consensus sequence.
     Consensus,
     /// Print per-sequence statistics.
@@ -262,12 +258,6 @@ fn main() -> anyhow::Result<()> {
                 Some(&consensus),
                 true,
             )?;
-        }
-        Some(OutFormat::Msa) => {
-            dfam_curator::io::fasta::write(&msa, &mut out, None)?;
-        }
-        Some(OutFormat::Fasta) => {
-            dfam_curator::io::fasta::write_ungapped(&msa, &mut out, None)?;
         }
         Some(OutFormat::Consensus) => {
             let name = family_id.unwrap_or("consensus");
