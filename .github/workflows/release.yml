@@ -40,8 +40,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           ARCHIVE="dfam-curator-${VERSION}-${{ matrix.target }}.tar.gz"
-          cd target/${{ matrix.target }}/release
-          tar czf "../../../${ARCHIVE}" linup stk discoord update-cache
+          STAGING="dfam-curator-${VERSION}"
+          mkdir -p "${STAGING}/bin"
+          cp target/${{ matrix.target }}/release/linup \
+             target/${{ matrix.target }}/release/stk \
+             target/${{ matrix.target }}/release/discoord \
+             target/${{ matrix.target }}/release/update-cache \
+             "${STAGING}/bin/"
+          cp README.md Dfam_Seeds.md LICENSE "${STAGING}/"
+          tar czf "${ARCHIVE}" "${STAGING}"
           echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
 
       - name: Package (Windows)
@@ -50,13 +57,16 @@ jobs:
         run: |
           $VERSION = $env:GITHUB_REF_NAME -replace '^v', ''
           $ARCHIVE = "dfam-curator-${VERSION}-${{ matrix.target }}.zip"
+          $Staging = "dfam-curator-${VERSION}"
           $BinDir = "target/${{ matrix.target }}/release"
-          Compress-Archive `
-            -Path "${BinDir}/linup.exe",
-                  "${BinDir}/stk.exe",
-                  "${BinDir}/discoord.exe",
-                  "${BinDir}/update-cache.exe" `
-            -DestinationPath $ARCHIVE
+          New-Item -ItemType Directory -Path "${Staging}/bin" | Out-Null
+          Copy-Item "${BinDir}/linup.exe",
+                    "${BinDir}/stk.exe",
+                    "${BinDir}/discoord.exe",
+                    "${BinDir}/update-cache.exe" `
+                    -Destination "${Staging}/bin/"
+          Copy-Item "README.md","Dfam_Seeds.md","LICENSE" -Destination "${Staging}/"
+          Compress-Archive -Path "${Staging}" -DestinationPath $ARCHIVE
           echo "ARCHIVE=$ARCHIVE" >> $env:GITHUB_ENV
 
       - name: Upload artifact
