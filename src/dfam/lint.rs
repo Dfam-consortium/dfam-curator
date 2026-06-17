@@ -1,4 +1,4 @@
-/// Tier-1 and tier-2 lint checks for Dfam Stockholm records.
+/// Tier-1, tier-2, and network lint checks for Dfam Stockholm records.
 use std::collections::{HashMap, HashSet};
 
 use crate::consensus::{build_consensus_from_sequences, ConsensusParams};
@@ -19,7 +19,7 @@ const RF_VALID: &[u8] = b"ACGTRYSWKMBDHVNacgtrymkswhbvdnXx.";
 /// All recognised `#=GF` tags (for unknown-tag detection).
 const KNOWN_GF_TAGS: &[&str] = &[
     "AC", "ID", "DE", "AU", "SE", "TP", "OC", "SQ",
-    "TD", "RN", "RT", "RA", "RM", "RL", "DR", "CC", "**", "KD", "BM",
+    "TD", "RN", "RT", "RA", "RM", "RL", "RD", "DR", "CC", "**", "KD", "BM",
 ];
 
 // ── Diagnostic types ──────────────────────────────────────────────────────────
@@ -168,6 +168,135 @@ pub fn check_duplicate_ids(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
     out
 }
 
+// ── Cross-record checks ───────────────────────────────────────────────────────
+
+/// File-level check: warn once if any record contains RT/RA/RL fields.
+///
+/// These are standard Stockholm fields that Dfam does not import; curators
+/// who fill them in may believe Dfam will display that metadata, but it won't.
+pub fn check_unused_citation_fields(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    let found: Vec<&str> = ["RT", "RA", "RL"]
+        .iter()
+        .copied()
+        .filter(|tag| records.iter().any(|r| r.gf_has(tag)))
+        .collect();
+    if found.is_empty() {
+        return vec![];
+    }
+    vec![warn(
+        "citation_fields_unused",
+        format!(
+            "{} field(s) found in one or more records; these standard Stockholm fields \
+             are not imported by Dfam and will be silently ignored",
+            found.join(", ")
+        ),
+    )]
+}
+
+/// Normalize a raw RD value to a bare DOI string (strips doi.org URL prefix).
+pub fn normalize_doi(raw: &str) -> &str {
+    let raw = raw.trim();
+    raw.strip_prefix("https://doi.org/")
+        .or_else(|| raw.strip_prefix("http://doi.org/"))
+        .unwrap_or(raw)
+}
+
+/// Network check: validate every unique RM (PMID) and RD (DOI) in the records.
+///
+/// Deduplicates identifiers across records and performs one HTTP HEAD request
+/// per unique value.  On network errors the check is skipped conservatively
+/// (the identifier is not flagged).  Returns one `(label, Diagnostic)` pair per
+/// record that references a bad identifier, so callers can print per-record lines.
+pub fn check_citations_network(records: &[RawDfamRecord]) -> Vec<(String, Diagnostic)> {
+    // Collect unique identifiers → list of record labels that reference each.
+    let mut pmids: HashMap<String, Vec<String>> = HashMap::new();
+    let mut dois:  HashMap<String, Vec<String>> = HashMap::new();
+
+    for r in records {
+        let label = r.label();
+        for v in r.gf_all("RM") {
+            let pmid = v.trim().to_string();
+            if !pmid.is_empty() {
+                pmids.entry(pmid).or_default().push(label.clone());
+            }
+        }
+        for v in r.gf_all("RD") {
+            let doi = normalize_doi(v).to_string();
+            if !doi.is_empty() {
+                dois.entry(doi).or_default().push(label.clone());
+            }
+        }
+    }
+
+    let mut out: Vec<(String, Diagnostic)> = Vec::new();
+
+    for (pmid, labels) in &pmids {
+        if !pmid_exists(pmid) {
+            let diag = err(
+                "pmid_unknown",
+                format!("PubMed ID {:?} was not found at pubmed.ncbi.nlm.nih.gov", pmid),
+            );
+            for label in labels {
+                out.push((label.clone(), diag.clone()));
+            }
+        }
+    }
+
+    for (doi, labels) in &dois {
+        if !doi_exists(doi) {
+            let diag = err(
+                "doi_unknown",
+                format!("DOI {:?} could not be resolved via doi.org", doi),
+            );
+            for label in labels {
+                out.push((label.clone(), diag.clone()));
+            }
+        }
+    }
+
+    out
+}
+
+fn pmid_exists(pmid: &str) -> bool {
+    let url = format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid);
+    match ureq::head(&url)
+        .set("User-Agent", "dfam-curator/stk-lint")
+        .call()
+    {
+        Ok(_) => true,
+        Err(ureq::Error::Status(404, _)) => false,
+        Err(_) => true, // network error — be conservative, don't flag
+    }
+}
+
+fn doi_exists(doi: &str) -> bool {
+    // bioRxiv/medRxiv append a version suffix (e.g. "v2") that doi.org does not register.
+    // Strip it before resolving so "10.1101/2024.01.27.577580v2" → "10.1101/2024.01.27.577580".
+    let resolved = if doi.starts_with("10.1101/") {
+        if let Some(v_pos) = doi.rfind('v') {
+            let suffix = &doi[v_pos + 1..];
+            if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+                &doi[..v_pos]
+            } else {
+                doi
+            }
+        } else {
+            doi
+        }
+    } else {
+        doi
+    };
+    let url = format!("https://doi.org/{}", resolved);
+    match ureq::head(&url)
+        .set("User-Agent", "dfam-curator/stk-lint")
+        .call()
+    {
+        Ok(_) => true,
+        Err(ureq::Error::Status(404, _)) => false,
+        Err(_) => true,
+    }
+}
+
 // ── Individual check functions ────────────────────────────────────────────────
 
 fn check_terminator(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
@@ -288,11 +417,143 @@ fn check_se(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
 }
 
 fn check_au(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
-    if let Some(au) = r.gf_first("AU") {
-        if au.trim().is_empty() {
-            d.push(err("empty_field", "AU field is present but empty"));
+    let Some(au) = r.gf_first("AU") else { return };
+    let au = au.trim();
+    if au.is_empty() {
+        d.push(err("empty_field", "AU field is present but empty"));
+        return;
+    }
+
+    let mut seen_orcids: Vec<String> = Vec::new();
+
+    for raw_token in au.split(';') {
+        let token = raw_token.trim();
+        if token.is_empty() {
+            continue;
+        }
+
+        // Commas are not valid in author tokens — catches pure comma lists and mixed separators.
+        if token.contains(',') {
+            d.push(warn(
+                "au_format",
+                format!("AU token {:?} contains a comma; use semicolons to separate authors", token),
+            ));
+            continue;
+        }
+
+        // Strip optional ORCID prefix: ORCID:xxxx-xxxx-xxxx-xxxx
+        let name = if let Some(rest) = token.strip_prefix("ORCID:") {
+            let (orcid, name_part) = rest.split_once(' ').unwrap_or((rest, ""));
+            if !is_valid_orcid(orcid) {
+                d.push(warn(
+                    "au_format",
+                    format!(
+                        "AU ORCID {:?} does not match the xxxx-xxxx-xxxx-xxxx pattern \
+                         (last group may end in X)",
+                        orcid
+                    ),
+                ));
+            } else {
+                let orcid_upper = orcid.to_uppercase();
+                if seen_orcids.contains(&orcid_upper) {
+                    d.push(err(
+                        "au_format",
+                        format!("AU ORCID {:?} appears more than once in this AU field", orcid),
+                    ));
+                } else {
+                    seen_orcids.push(orcid_upper);
+                }
+            }
+            name_part.trim()
+        } else {
+            token
+        };
+
+        if name.is_empty() {
+            d.push(warn("au_format", format!("AU {:?}: ORCID prefix present but no name follows it", token)));
+            continue;
+        }
+
+        // Colons are not valid in names (the ORCID: prefix was already consumed above).
+        if name.contains(':') {
+            d.push(warn(
+                "au_format",
+                format!("AU token {:?} contains a colon; colons are only valid as part of an ORCID: prefix", token),
+            ));
+            continue;
+        }
+
+        // Must have at least two words.
+        if !name.contains(' ') {
+            d.push(warn(
+                "au_format",
+                format!("AU token {:?} has no space; expected 'First Last' format", token),
+            ));
+            continue;
+        }
+
+        // Flag any word that contains a '.': catches "R.", "J.", "A.F.A.", "F.", etc.
+        if name.split_whitespace().any(|w| w.contains('.')) {
+            d.push(warn(
+                "au_format",
+                format!(
+                    "AU token {:?} appears to use abbreviated initials; \
+                     use full 'First Last' format",
+                    token
+                ),
+            ));
+            continue;
+        }
+
+        let words: Vec<&str> = name.split_whitespace().collect();
+
+        // Flag single-letter first word: catches "B McClintock".
+        // Middle initials without periods (e.g. "Arian F Smit") are still accepted.
+        if words.first().map_or(false, |w| {
+            w.len() == 1 && w.chars().next().map_or(false, |c| c.is_ascii_alphabetic())
+        }) {
+            d.push(err(
+                "au_format",
+                format!(
+                    "AU token {:?} appears to use an abbreviated first name; \
+                     use full 'First Last' format",
+                    token
+                ),
+            ));
+            continue;
+        }
+
+        // Flag old 'Last Initial' style: last word is a single uppercase letter.
+        // Catches "Smith J", "Watts E".
+        if words.last().map_or(false, |w| {
+            w.len() == 1 && w.chars().next().map_or(false, |c| c.is_ascii_uppercase())
+        }) {
+            d.push(err(
+                "au_format",
+                format!(
+                    "AU token {:?} appears to use 'Last Initial' format; \
+                     use 'First Last' format",
+                    token
+                ),
+            ));
         }
     }
+}
+
+/// Validate an ORCID identifier string (the bare `xxxx-xxxx-xxxx-xxxx` part,
+/// without the `ORCID:` prefix).  The last group may end with `X` (check digit).
+fn is_valid_orcid(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() != 4 {
+        return false;
+    }
+    parts[..3].iter().all(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_digit()))
+        && parts[3].len() == 4
+        && {
+            let (digits, check) = parts[3].split_at(3);
+            digits.chars().all(|c| c.is_ascii_digit())
+                && (check == "X" || check.chars().all(|c| c.is_ascii_digit()))
+        }
 }
 
 fn check_tp(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
@@ -350,25 +611,53 @@ fn check_sq(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
 fn check_ref_blocks(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     let has_rn = r.gf_has("RN");
     let has_rm = r.gf_has("RM");
-    if has_rn && !has_rm {
-        d.push(warn("ref_block_incomplete", "RN is present but no RM (PubMed ID) found"));
+    let has_rd = r.gf_has("RD");
+
+    if has_rn && !has_rm && !has_rd {
+        d.push(warn(
+            "ref_block_incomplete",
+            "RN is present but neither RM (PubMed ID) nor RD (DOI) found; at least one is required",
+        ));
     }
-    if has_rm && !has_rn {
-        d.push(warn("ref_block_incomplete", "RM is present but no RN (reference number) found"));
+    if (has_rm || has_rd) && !has_rn {
+        d.push(err("ref_block_incomplete", "RM/RD is present but no RN (reference number) found"));
     }
 
-    // RM/RT/RA/RL must follow their RN line.
-    const NEEDS_RN: &[&str] = &["RM", "RT", "RA", "RL"];
-    let mut seen_rn = false;
-    for (tag, _) in &r.gf {
-        if tag == "RN" {
-            seen_rn = true;
-        } else if NEEDS_RN.contains(&tag.as_str()) && !seen_rn {
+    // RM/RD/RT/RA/RL must follow their RN line — only meaningful when RN exists.
+    // If RN is absent entirely, ref_block_incomplete already covers it.
+    if has_rn {
+        const NEEDS_RN: &[&str] = &["RM", "RD", "RT", "RA", "RL"];
+        let mut seen_rn = false;
+        for (tag, _) in &r.gf {
+            if tag == "RN" {
+                seen_rn = true;
+            } else if NEEDS_RN.contains(&tag.as_str()) && !seen_rn {
+                d.push(err(
+                    "ref_block_order",
+                    format!("{} appears before RN; RN must precede all publication fields", tag),
+                ));
+                break;
+            }
+        }
+    }
+
+    // Validate RD format: must be a bare DOI (10.xxx/...) or a doi.org URL.
+    for rd in r.gf_all("RD") {
+        let raw = rd.trim();
+        let bare = raw
+            .strip_prefix("https://doi.org/")
+            .or_else(|| raw.strip_prefix("http://doi.org/"))
+            .unwrap_or(raw);
+        if !bare.starts_with("10.") || bare.len() < 8 {
             d.push(err(
-                "ref_block_order",
-                format!("{} appears before RN; RN must precede all publication fields", tag),
+                "rd_format",
+                format!(
+                    "RD {:?} does not look like a valid DOI; expected a bare DOI \
+                     (e.g. '10.1093/nar/gkl1049') or a doi.org URL \
+                     (e.g. 'https://doi.org/10.1093/nar/gkl1049')",
+                    raw
+                ),
             ));
-            break;
         }
     }
 }
@@ -683,7 +972,7 @@ mod tests {
     #[test]
     fn clean_record_no_errors() {
         let r = make_record(
-            &[("DE","A test family"),("AU","Smith J"),("TP","Interspersed_Repeat;Unknown"),
+            &[("DE","A test family"),("AU","John Smith"),("TP","Interspersed_Repeat;Unknown"),
               ("OC","Mus musculus"),("SQ","1")],
             Some("xxxx"),
             &[("s1", "ACGT")],
@@ -870,7 +1159,7 @@ mod tests {
 #=GF OC    Mus musculus\n\
 #=GF SQ    1\n\
 #=GC RF    ACGT\n\
-#=AU Robert Hubley, John Smith\n\
+#=AU Barbara McClintock, Roy Britten\n\
 s1          ACGT\n\
 //\n";
         let records: Vec<_> = iter_records(Cursor::new(stk))
@@ -898,7 +1187,7 @@ s1          ACGT\n\
 #=GF OC    Mus musculus\n\
 #=GF SQ    1\n\
 #=GC RF    ACGT\n\
-#AU Robert Hubley, John Smith\n\
+#AU Barbara McClintock, Roy Britten\n\
 s1          ACGT\n\
 //\n";
         let records: Vec<_> = iter_records(Cursor::new(stk))
@@ -1048,6 +1337,114 @@ s1          ACGT\n\
         assert_eq!(errors[0].check, "duplicate_id");
         assert_eq!(infos.len(), 1, "expected one info for update record with AC");
         assert_eq!(infos[0].check, "duplicate_id_update");
+    }
+
+    // ── AU format tests ───────────────────────────────────────────────────────
+
+    fn au_warns(au: &str) -> bool {
+        let r = make_record(
+            &[("DE","x"),("AU", au),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""),
+            &[],
+        );
+        lint_record(&r, None).iter().any(|d| d.check == "au_format")
+    }
+
+    #[test]
+    fn au_full_name_is_clean() {
+        assert!(!au_warns("Barbara McClintock"));
+    }
+
+    #[test]
+    fn au_multiple_full_names_semicolon_is_clean() {
+        assert!(!au_warns("Barbara McClintock; Pita Enriquez-Lopez"));
+    }
+
+    #[test]
+    fn au_orcid_full_name_is_clean() {
+        assert!(!au_warns("ORCID:0000-0001-2345-6789 Barbara McClintock"));
+    }
+
+    #[test]
+    fn au_orcid_with_x_check_digit_is_clean() {
+        assert!(!au_warns("ORCID:0000-0001-2345-678X Barbara McClintock"));
+    }
+
+    #[test]
+    fn au_last_initial_warns() {
+        assert!(au_warns("Smith J"));
+    }
+
+    #[test]
+    fn au_abbreviated_initial_dot_warns() {
+        assert!(au_warns("E. Watts"));
+    }
+
+    #[test]
+    fn au_middle_initial_dot_warns() {
+        assert!(au_warns("Elena J. Watts"));
+    }
+
+    #[test]
+    fn au_chained_initials_warns() {
+        assert!(au_warns("A.F.A. Smit"));
+    }
+
+    #[test]
+    fn au_single_letter_first_name_warns() {
+        assert!(au_warns("B McClintock"));
+    }
+
+    #[test]
+    fn au_middle_initial_no_dot_is_clean() {
+        // Single-letter middle initial without period is acceptable.
+        assert!(!au_warns("Arian F Smit"));
+    }
+
+    #[test]
+    fn au_no_space_warns() {
+        assert!(au_warns("Watts"));
+    }
+
+    #[test]
+    fn au_comma_separator_warns() {
+        assert!(au_warns("Barbara McClintock, Roy Britten"));
+    }
+
+    #[test]
+    fn au_mixed_separator_warns() {
+        assert!(au_warns("Barbara McClintock; Roy Britten, John Smith"));
+    }
+
+    #[test]
+    fn au_colon_in_name_warns() {
+        assert!(au_warns("Barbara: McClintock"));
+    }
+
+    #[test]
+    fn au_duplicate_orcid_warns() {
+        assert!(au_warns(
+            "ORCID:0000-0001-2345-6789 Barbara McClintock; \
+             ORCID:0000-0001-2345-6789 Roy Britten"
+        ));
+    }
+
+    #[test]
+    fn au_distinct_orcids_clean() {
+        assert!(!au_warns(
+            "ORCID:0000-0001-2345-6789 Barbara McClintock; \
+             ORCID:0000-0009-8765-4321 Roy Britten"
+        ));
+    }
+
+    #[test]
+    fn au_bad_orcid_format_warns() {
+        assert!(au_warns("ORCID:0000-0001-2345 Barbara McClintock"));
+    }
+
+    #[test]
+    fn au_orcid_no_name_warns() {
+        assert!(au_warns("ORCID:0000-0001-2345-6789"));
     }
 
     #[test]

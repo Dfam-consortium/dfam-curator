@@ -140,13 +140,15 @@ OPTIONS:
     --min-severity <LEVEL>      Minimum severity to report: error | warn | info  [default: info]
     --no-cache-warn             Suppress notices about missing tier-2 cache files
     --genome <FILE>             Reference genome (FASTA or .2bit) for coordinate validation
+    --no-network                Skip live validation of PubMed IDs (RM) and DOIs (RD)
 ```
 
 Exit status: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
 
 Checks include: Stockholm structure, required annotation fields, record terminator,
 duplicate IDs (with AC-aware severity), RF/consensus agreement, taxonomy names,
-Dfam classification strings, and (with `--genome`) sequence coordinate validity.
+Dfam classification strings, live PubMed/DOI resolution (disable with `--no-network`),
+and (with `--genome`) sequence coordinate validity.
 Validation is split into tier-1 (always available) and tier-2 (requires a populated
 cache; see [update-cache](#update-cache)).
 
@@ -207,10 +209,10 @@ OPTIONS:
 Operations are applied in a fixed sequence: `--delete`, then `--set`, then `--append`, then `--sub`.
 
 ```sh
-stk edit --set AU "Hubley R" families.stk
+stk edit --set AU "Barbara McClintock" families.stk
 stk edit --delete SE --set DE "Updated description" families.stk
 stk edit --select MyFam --append OC "Mus musculus" families.stk
-stk edit --set AU "Hubley R" -o fixed.stk families.stk
+stk edit --set AU "Barbara McClintock" -o fixed.stk families.stk
 stk edit --sub ID "/^(.*)-$/$1/" families.stk
 stk edit --sub DE "/foo/bar/g" families.stk
 stk edit --update-consensus families.stk

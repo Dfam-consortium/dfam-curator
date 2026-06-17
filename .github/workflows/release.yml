@@ -48,6 +48,7 @@ jobs:
              target/${{ matrix.target }}/release/update-cache \
              "${STAGING}/bin/"
           cp README.md Dfam_Seeds.md LICENSE "${STAGING}/"
+          cp -r examples "${STAGING}/"
           tar czf "${ARCHIVE}" "${STAGING}"
           echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
 
@@ -66,6 +67,7 @@ jobs:
                     "${BinDir}/update-cache.exe" `
                     -Destination "${Staging}/bin/"
           Copy-Item "README.md","Dfam_Seeds.md","LICENSE" -Destination "${Staging}/"
+          Copy-Item "examples" -Destination "${Staging}/" -Recurse
           Compress-Archive -Path "${Staging}" -DestinationPath $ARCHIVE
           echo "ARCHIVE=$ARCHIVE" >> $env:GITHUB_ENV
 

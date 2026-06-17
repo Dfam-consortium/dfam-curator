@@ -19,7 +19,8 @@ use dfam_curator::{
     dfam::{
         cache::{cache_dir, load_cache, missing_cache_files, refresh_cache, RefreshMode},
         edit::{apply_ops, Op},
-        lint::{check_duplicate_ids, lint_record, Diagnostic, Severity},
+        lint::{check_citations_network, check_duplicate_ids, check_unused_citation_fields,
+               lint_record, Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
     },
     io::{
@@ -116,6 +117,12 @@ struct LintArgs {
     /// ±3 bp are also reported as WARN.
     #[arg(long, value_name = "FILE")]
     genome: Option<PathBuf>,
+
+    /// Skip network validation of PubMed IDs (RM) and DOIs (RD).
+    /// By default, stk lint makes HTTP HEAD requests to pubmed.ncbi.nlm.nih.gov
+    /// and doi.org to verify that each cited identifier actually exists.
+    #[arg(long)]
+    no_network: bool,
 }
 
 fn run_lint(args: LintArgs) -> anyhow::Result<()> {
@@ -190,12 +197,25 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
             records.push(record);
         }
 
-        for d in check_duplicate_ids(&records) {
+        for d in check_duplicate_ids(&records).into_iter()
+            .chain(check_unused_citation_fields(&records))
+        {
             if d.severity >= min_sev {
-                println!(
-                    "{}\tFILE\t{}\t{}\t{}",
-                    filename, d.severity, d.check, d.message
-                );
+                if d.severity == Severity::Error {
+                    any_error = true;
+                }
+                println!("{}\tFILE\t{}\t{}\t{}", filename, d.severity, d.check, d.message);
+            }
+        }
+
+        if !args.no_network {
+            for (label, d) in check_citations_network(&records) {
+                if d.severity >= min_sev {
+                    if d.severity == Severity::Error {
+                        any_error = true;
+                    }
+                    println!("{}\t{}\t{}\t{}\t{}", filename, label, d.severity, d.check, d.message);
+                }
             }
         }
     }
@@ -340,11 +360,11 @@ fn run_extract(args: ExtractArgs) -> anyhow::Result<()> {
                   substitution is applied to each line independently.\n  \
                   Capture groups use $1, $2, … in the replacement.\n\n\
                   Examples:\n  \
-                  stk edit --set AU \"Hubley R\" families.stk\n  \
+                  stk edit --set AU \"Barbara McClintock\" families.stk\n  \
                   stk edit --delete SE --set DE \"Updated desc\" families.stk\n  \
                   stk edit --select MyFam --append OC \"Mus musculus\" families.stk\n  \
-                  stk edit --select 3 --set AU \"Hubley R\" families.stk\n  \
-                  stk edit --set AU \"Hubley R\" -o fixed.stk families.stk\n  \
+                  stk edit --select 3 --set AU \"Barbara McClintock\" families.stk\n  \
+                  stk edit --set AU \"Barbara McClintock\" -o fixed.stk families.stk\n  \
                   stk edit --sub ID \"/^(.*)-$/$1/\" families.stk\n  \
                   stk edit --sub DE \"/foo/bar/g\" families.stk\n  \
                   stk edit --set ID \"new-\" --sub ID \"/^(.*)-$/$1/\" families.stk\n  \
