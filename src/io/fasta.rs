@@ -45,7 +45,7 @@ pub fn read(path: &Path) -> io::Result<MultiAlign> {
     let reference = SequenceRow::new(ref_name, ref_seq);
     let instances = entries
         .into_iter()
-        .map(|(name, seq)| SequenceRow::new(name, seq))
+        .map(|(name, seq)| make_instance_row(name, seq))
         .collect();
 
     Ok(MultiAlign::from_sequences(reference, instances))
@@ -56,20 +56,24 @@ pub fn read(path: &Path) -> io::Result<MultiAlign> {
 /// Only instance sequences (not the reference) are written, matching
 /// Perl `MultAln::toFASTA()` default behaviour.  Leading/trailing space
 /// padding is converted to `-`.  The optional `consensus_seq` is
-/// prepended as `>consensus` if provided.
+/// prepended as `>consensus` if provided.  The optional `description` is
+/// appended to each sequence header after two spaces (FASTA description
+/// field), e.g. `"families.stk:3 id=MamSINE1"`.
 pub fn write(
     msa: &MultiAlign,
     out: &mut dyn Write,
     consensus_seq: Option<&[u8]>,
+    description: Option<&str>,
 ) -> io::Result<()> {
+    let desc_suffix = description.map(|d| format!("  {}", d)).unwrap_or_default();
     if let Some(cons) = consensus_seq {
-        writeln!(out, ">consensus")?;
+        writeln!(out, ">consensus{}", desc_suffix)?;
         let s: Vec<u8> = cons.iter().map(|&b| if b == b' ' { b'-' } else { b }).collect();
         out.write_all(&s)?;
         writeln!(out)?;
     }
     for seq in &msa.sequences[1..] {
-        writeln!(out, ">{}", seq_label(&seq.name, seq.seq_start, seq.seq_end, seq.orient))?;
+        writeln!(out, ">{}{}", seq_label(&seq.name, seq.seq_start, seq.seq_end, seq.orient), desc_suffix)?;
         let s: Vec<u8> = seq.seq.iter().map(|&b| if b == b' ' { b'-' } else { b }).collect();
         out.write_all(&s)?;
         writeln!(out)?;
@@ -103,6 +107,42 @@ pub fn write_ungapped(
     Ok(())
 }
 
+fn make_instance_row(orig_name: String, seq: Vec<u8>) -> SequenceRow {
+    let (name, seq_start, seq_end, orient) = parse_seq_name_coords(&orig_name);
+    let mut row = SequenceRow::new(name, seq);
+    row.seq_start = seq_start;
+    row.seq_end = seq_end;
+    row.orient = orient;
+    row
+}
+
+fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
+    if let Some(colon) = name.rfind(':') {
+        let prefix = &name[..colon];
+        let coords = &name[colon + 1..];
+        if let Some(dash) = coords.find('-') {
+            let (s, e_raw) = (&coords[..dash], &coords[dash + 1..]);
+            let e = e_raw
+                .trim_end_matches(|c: char| c == '+' || c == '-')
+                .trim_end_matches('_');
+            if let (Ok(a), Ok(b)) = (s.parse::<u64>(), e.parse::<u64>()) {
+                let orient = if e_raw.ends_with("_-") {
+                    Orientation::Reverse
+                } else if e_raw.ends_with("_+") {
+                    Orientation::Forward
+                } else if a > b {
+                    Orientation::Reverse
+                } else {
+                    Orientation::Forward
+                };
+                let (seq_start, seq_end) = if a <= b { (a, b) } else { (b, a) };
+                return (prefix.to_string(), seq_start, seq_end, orient);
+            }
+        }
+    }
+    (name.to_string(), 0, 0, Orientation::Forward)
+}
+
 /// Build the FASTA label matching Perl's toFASTA id convention:
 /// forward → `name:seq_start-seq_end`; reverse → `name:seq_end-seq_start`.
 /// Falls back to bare `name` when coordinates are both zero.
@@ -121,7 +161,7 @@ mod tests {
     use super::*;
     fn roundtrip(msa: &MultiAlign) -> Vec<u8> {
         let mut buf = Vec::new();
-        write(msa, &mut buf, None).unwrap();
+        write(msa, &mut buf, None, None).unwrap();
         buf
     }
 

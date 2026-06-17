@@ -203,13 +203,29 @@ or for de novo generated families a one-line description might be:
 
 ### `AU` — Author
 
-Who created or curated this seed alignment.  Free-form text; conventional format is
-`Last F` (last name then initial) or multiple authors separated by semicolons.
+Who created or curated this seed alignment.  Use **`First Last`** for each author,
+with multiple authors separated by **semicolons**.  Commas are not allowed as
+separators because they appear in some names.
 
 ```
-#=GF AU    Smith R
-#=GF AU    Jayapal P; Ruef W
+#=GF AU    Barbara McClintock
+#=GF AU    Pita Enriquez-Lopez; Weidong Bao
 ```
+
+Curators who have an ORCID may prefix their name with it:
+
+```
+#=GF AU    ORCID:0000-0001-2345-6789 Barbara McClintock
+```
+
+Formats that `stk lint` will flag as warnings:
+- Any period in a name word: `B. McClintock`, `Barbara J. McClintock`, `A.F.A. Smit`
+- Single-letter first name: `B McClintock`
+- Old `Last Initial` style: `McClintock B`
+- Comma-separated lists: `Barbara McClintock, Roy Britten`
+- Missing space (single token): `McClintock`
+
+A single-letter middle initial *without* a period is accepted: `Barbara B McClintock`.
 
 ### `SE` — Source
 
@@ -300,24 +316,29 @@ The command or pipeline used to build the alignment.
 #=GF BM    RepeatModeler 2.0
 ```
 
-### `RN` / `RM` / `RT` / `RA` / `RL` — Literature reference block
+### `RN` / `RM` / `RD` — Literature reference block
 
 A structured literature citation.  Each reference block begins with `RN [N]` (a sequential
-reference number in brackets), followed by:
+reference number in square brackets), followed by at least one of:
 
-| Tag | Meaning             |
-|-----|---------------------|
-| `RN` | Reference number (e.g. `[1]`) — **must come first** |
-| `RM` | PubMed ID (required)           |
-| `RT` | Title               |
-| `RA` | Author(s)           |
-| `RL` | Journal and volume  |
+| Tag | Meaning                                      |
+|-----|----------------------------------------------|
+| `RN` | Reference number — **must come first**, format `[N]` |
+| `RM` | PubMed ID                                   |
+| `RD` | DOI (bare, e.g. `10.1093/nar/gkl1049`, or as a `https://doi.org/` URL) |
 
-`RN` must be the first line in each reference block, followed by `RM` (required), then
-optionally `RT`, `RA`, and `RL` in that order.  `stk lint` will report an error if any
-of `RM`/`RT`/`RA`/`RL` appears before the `RN` line, and a warning if `RN` or `RM` is
-present without the other.  `stk edit --set` will automatically reorder fields into the
-correct sequence if they are supplied out of order.
+Every reference block must have `RN` followed by at least one of `RM` or `RD`.  `stk lint`
+will report an error if `RM`/`RD` is present without `RN`.  `stk edit --set` will
+automatically reorder fields into the correct sequence if they are supplied out of order.
+
+By default `stk lint` makes live HTTP requests to verify that each PubMed ID and DOI
+actually resolves.  Pass `--no-network` to skip this.  bioRxiv/medRxiv version suffixes
+(e.g. `10.1101/2024.01.27.577580v2`) are automatically stripped before resolving since
+`doi.org` only registers the base DOI.
+
+> **Note:** The standard Stockholm tags `RT` (title), `RA` (authors), and `RL` (journal)
+> are **not imported by Dfam** and will be silently ignored.  `stk lint` warns if they are
+> present.  Use `RM` or `RD` to link publications.
 
 ### `DR` — Database cross-reference
 
@@ -455,6 +476,13 @@ Common issues flagged by `stk lint`:
 | `de_too_long`          | ERROR    | `DE` exceeds 80 characters                     |
 | `ac_format`            | ERROR    | `AC` does not match `DF/DR` + 7 or 9 digits    |
 | `duplicate_id`         | ERROR    | Same `ID` used in two records without `AC`     |
+| `au_format`            | ERROR    | `AU` token uses abbreviated/single-letter first name, `Last Initial` style, or duplicate ORCID |
+| `au_format`            | WARN     | `AU` token uses abbreviated initials with periods, commas, colons, or missing space |
+| `ref_block_incomplete` | ERROR    | `RM`/`RD` present without `RN`, or `RN` present without `RM`/`RD` |
+| `ref_block_order`      | ERROR    | `RM`/`RD` appears before its `RN` line         |
+| `citation_fields_unused` | WARN   | `RT`/`RA`/`RL` present but not imported by Dfam |
+| `pmid_unknown`         | ERROR    | PubMed ID not found at pubmed.ncbi.nlm.nih.gov (network check) |
+| `doi_unknown`          | ERROR    | DOI could not be resolved via doi.org (network check) |
 | `rf_consensus_mismatch`| WARN     | `#=GC RF` does not match the consensus called from the alignment |
 | `oc_unknown`           | ERROR    | `OC` value not found in NCBI taxonomy          |
 | `tp_unknown`           | ERROR    | `TP` value not found in Dfam classification    |

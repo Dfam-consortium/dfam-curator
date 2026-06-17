@@ -1,7 +1,9 @@
+pub mod clustal;
 pub mod crossmatch;
 pub mod fasta;
 pub mod linup_fmt;
 pub mod stockholm;
+pub mod twobit;
 
 use crate::alignment::MultiAlign;
 use crate::build::Reference;
@@ -13,6 +15,8 @@ use std::path::Path;
 pub enum Format {
     Stockholm,
     Fasta,
+    /// Clustal ALN interleaved format.
+    Clustal,
     /// Crossmatch / RepeatMasker `.align` pairwise format.
     Crossmatch,
 }
@@ -35,6 +39,9 @@ pub fn detect_format(path: &Path) -> io::Result<Format> {
         if trimmed.starts_with("# STOCKHOLM") {
             return Ok(Format::Stockholm);
         }
+        if trimmed.to_ascii_uppercase().starts_with("CLUSTAL") {
+            return Ok(Format::Clustal);
+        }
         if trimmed.starts_with('>') {
             return Ok(Format::Fasta);
         }
@@ -55,7 +62,8 @@ pub fn detect_format(path: &Path) -> io::Result<Format> {
 pub fn read_alignment(path: &Path) -> io::Result<MultiAlign> {
     match detect_format(path)? {
         Format::Stockholm => stockholm::read(path),
-        Format::Fasta => fasta::read(path),
+        Format::Fasta     => fasta::read(path),
+        Format::Clustal   => clustal::read(path),
         Format::Crossmatch => read_crossmatch_as_multialign(path),
     }
 }
