@@ -20,8 +20,6 @@ jobs:
             os: ubuntu-22.04
           - target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -34,8 +32,7 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Package
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -51,25 +48,6 @@ jobs:
           cp -r examples "${STAGING}/"
           tar czf "${ARCHIVE}" "${STAGING}"
           echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $VERSION = $env:GITHUB_REF_NAME -replace '^v', ''
-          $ARCHIVE = "dfam-curator-${VERSION}-${{ matrix.target }}.zip"
-          $Staging = "dfam-curator-${VERSION}"
-          $BinDir = "target/${{ matrix.target }}/release"
-          New-Item -ItemType Directory -Path "${Staging}/bin" | Out-Null
-          Copy-Item "${BinDir}/linup.exe",
-                    "${BinDir}/stk.exe",
-                    "${BinDir}/discoord.exe",
-                    "${BinDir}/update-cache.exe" `
-                    -Destination "${Staging}/bin/"
-          Copy-Item "README.md","Dfam_Seeds.md","LICENSE" -Destination "${Staging}/"
-          Copy-Item "examples" -Destination "${Staging}/" -Recurse
-          Compress-Archive -Path "${Staging}" -DestinationPath $ARCHIVE
-          echo "ARCHIVE=$ARCHIVE" >> $env:GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
