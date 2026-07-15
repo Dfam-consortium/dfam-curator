@@ -18,9 +18,12 @@ use dfam_curator::{
     consensus::{build_consensus_from_sequences, ConsensusParams},
     dfam::{
         cache::{cache_dir, load_cache, missing_cache_files, refresh_cache, RefreshMode},
+        clean::{clean_record, CleanReport},
         edit::{apply_ops, Op},
-        lint::{check_citations_network, check_duplicate_ids, check_unused_citation_fields,
-               lint_record, Diagnostic, Severity},
+        lint::{check_ac_summary, check_citations_network, check_duplicate_ids,
+               check_orcid_summary, check_seqid_format_summary,
+               check_unused_citation_fields, lint_record, rf_is_handcurated,
+               Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
     },
     io::{
@@ -199,6 +202,9 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
 
         for d in check_duplicate_ids(&records).into_iter()
             .chain(check_unused_citation_fields(&records))
+            .chain(check_ac_summary(&records))
+            .chain(check_orcid_summary(&records))
+            .chain(check_seqid_format_summary(&records))
         {
             if d.severity >= min_sev {
                 if d.severity == Severity::Error {
@@ -308,6 +314,12 @@ struct ExtractArgs {
     #[arg(long, short = 'o', value_name = "FILE")]
     output: Option<PathBuf>,
 
+    /// Do not clean the extracted record on write.
+    /// By default it is normalized to Dfam conventions
+    /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
+    #[arg(long)]
+    no_clean: bool,
+
     /// One or more Stockholm files to search.
     #[arg(required = true)]
     input: Vec<PathBuf>,
@@ -323,15 +335,19 @@ fn run_extract(args: ExtractArgs) -> anyhow::Result<()> {
     };
 
     let mut found = false;
+    let mut clean_report = CleanReport::default();
     for path in &args.input {
         let f = std::fs::File::open(path)
             .with_context(|| format!("cannot open {}", path.display()))?;
 
         for result in iter_records(BufReader::new(f)) {
-            let record = result
+            let mut record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
 
             if record_selected(&record, &args.select) {
+                if !args.no_clean {
+                    clean_report.merge(clean_record(&mut record));
+                }
                 record.write_to(&mut out)?;
                 found = true;
             }
@@ -339,6 +355,7 @@ fn run_extract(args: ExtractArgs) -> anyhow::Result<()> {
     }
 
     out.flush()?;
+    report_clean("stk extract", &clean_report);
 
     if !found {
         anyhow::bail!("no record matching {:?} found", args.select);
@@ -420,6 +437,12 @@ struct EditArgs {
     /// Write output to FILE instead of stdout.
     #[arg(long, short = 'o', value_name = "FILE")]
     output: Option<PathBuf>,
+
+    /// Do not clean records on write.
+    /// By default every written record is normalized to Dfam conventions
+    /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
+    #[arg(long)]
+    no_clean: bool,
 
     /// One or more Stockholm files to edit.
     #[arg(required = true)]
@@ -509,6 +532,13 @@ fn update_rf_consensus(record: &mut RawDfamRecord) {
     record.gc.insert("RF".to_string(), cons_str);
 }
 
+/// Print a one-line stderr summary of what clean-on-write changed, if anything.
+fn report_clean(cmd: &str, report: &CleanReport) {
+    if let Some(summary) = report.summary() {
+        eprintln!("{}: cleaned output — {}", cmd, summary);
+    }
+}
+
 fn run_edit(args: EditArgs) -> anyhow::Result<()> {
     // Build the operation list.  --set, --append, and --sub consume 2 values each.
     let mut ops: Vec<Op> = Vec::new();
@@ -541,6 +571,8 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
         )),
     };
 
+    let mut clean_report = CleanReport::default();
+
     for path in &args.input {
         let f = std::fs::File::open(path)
             .with_context(|| format!("cannot open {}", path.display()))?;
@@ -558,8 +590,23 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
             if selected {
                 apply_ops(&mut record, &ops);
                 if args.update_consensus {
+                    // The RF line is about to be recalled from the alignment, so a
+                    // CT marking it as hand-curated no longer describes it.
+                    if rf_is_handcurated(&record) {
+                        eprintln!(
+                            "{}: replacing hand-curated consensus; removing #=GF CT",
+                            record.label()
+                        );
+                        record.gf.retain(|(t, _)| t != "CT");
+                    }
                     update_rf_consensus(&mut record);
                 }
+            }
+
+            // Clean-on-write applies to every record, selected or not, since it is
+            // a property of producing standard-conformant output.
+            if !args.no_clean {
+                clean_report.merge(clean_record(&mut record));
             }
 
             record.write_to(&mut out)?;
@@ -567,6 +614,7 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
     }
 
     out.flush()?;
+    report_clean("stk edit", &clean_report);
     Ok(())
 }
 
@@ -624,6 +672,12 @@ struct ConvertArgs {
     /// Write output to FILE instead of stdout.
     #[arg(long, short = 'o', value_name = "FILE")]
     out: Option<PathBuf>,
+
+    /// Do not clean records on write (Stockholm output only).
+    /// By default STK output is normalized to Dfam conventions
+    /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
+    #[arg(long)]
+    no_clean: bool,
 
     /// Input alignment file (Stockholm, FASTA/A2M, or crossmatch .align).
     #[arg(required = true)]
@@ -683,14 +737,17 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
         .unwrap_or_else(|| "input".to_string());
 
     if fmt == Format::Stockholm {
-        convert_stk_input(&args.input, to, args.select.as_deref(), &stem, &mut output)?;
+        let report =
+            convert_stk_input(&args.input, to, args.select.as_deref(), &stem, args.no_clean, &mut output)?;
+        output.flush()?;
+        report_clean("stk convert", &report);
     } else {
         let msa = read_alignment(&args.input)
             .with_context(|| format!("failed to read {}", args.input.display()))?;
         convert_one_record(&msa, to, None, &stem, 1, &mut output)?;
+        output.flush()?;
     }
 
-    output.flush()?;
     Ok(())
 }
 
@@ -699,13 +756,16 @@ fn convert_stk_input(
     to: &OutFormat,
     select: Option<&str>,
     stem: &str,
+    no_clean: bool,
     out: &mut Box<dyn Write>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<CleanReport> {
     let f = std::fs::File::open(path)
         .with_context(|| format!("cannot open {}", path.display()))?;
 
+    let mut clean_report = CleanReport::default();
+
     for result in iter_records(BufReader::new(f)) {
-        let record = result.with_context(|| format!("parse error in {}", path.display()))?;
+        let mut record = result.with_context(|| format!("parse error in {}", path.display()))?;
 
         if let Some(sel) = select {
             if !record_selected(&record, sel) {
@@ -715,7 +775,11 @@ fn convert_stk_input(
 
         match to {
             OutFormat::Stk => {
-                // Lossless round-trip: preserve all GF/GC fields verbatim.
+                // Lossless round-trip: preserve all GF/GC fields verbatim, apart
+                // from clean-on-write normalization toward Dfam conventions.
+                if !no_clean {
+                    clean_report.merge(clean_record(&mut record));
+                }
                 record.write_to(out)?;
             }
             OutFormat::Reference => {
@@ -739,7 +803,7 @@ fn convert_stk_input(
             }
         }
     }
-    Ok(())
+    Ok(clean_report)
 }
 
 /// Emit one `MultiAlign` in the requested output format.

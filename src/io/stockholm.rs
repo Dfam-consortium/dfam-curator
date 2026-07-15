@@ -134,9 +134,9 @@ fn parse_record<R: BufRead>(reader: R) -> io::Result<MultiAlign> {
             // Annotation lines.
             if let Some(rest) = trimmed.strip_prefix("#=GC RF") {
                 // Reference annotation — may be split across blocks.
-                // Normalize '.' (Stockholm insert-column gap) -> '-'.
+                // Normalize any Stockholm gap character ('-', '.', '_', '~') -> '-'.
                 let data: Vec<u8> = rest.trim().bytes()
-                    .map(|b| if b == b'.' { b'-' } else { b })
+                    .map(|b| if dfam_stk_io::is_gap(b) { b'-' } else { b })
                     .collect();
                 rf_line.get_or_insert_with(Vec::new).extend_from_slice(&data);
             } else if let Some(rest) = trimmed.strip_prefix("#=GF ID") {
@@ -150,14 +150,14 @@ fn parse_record<R: BufRead>(reader: R) -> io::Result<MultiAlign> {
         }
 
         // Sequence line: "name  ACGT-..."
-        // Normalize '.' -> '-' so the consensus builder and display treat them
-        // uniformly as gap characters.  RepeatModeler writes STK files using '.'
-        // for all gap positions; Perl MultAln converts them back to '-' on read.
+        // Normalize every Stockholm gap character ('-', '.', '_', '~') -> '-' so the
+        // consensus builder and display treat them uniformly.  RepeatModeler writes STK
+        // files using '.' for all gap positions; Perl MultAln converts them back to '-'.
         let mut parts = trimmed.splitn(2, char::is_whitespace);
         let name = match parts.next() { Some(n) => n.to_string(), None => continue };
         let data: Vec<u8> = match parts.next() {
             Some(d) => d.trim().bytes()
-                .map(|b| if b == b'.' { b'-' } else { b })
+                .map(|b| if dfam_stk_io::is_gap(b) { b'-' } else { b })
                 .collect(),
             None => continue,
         };

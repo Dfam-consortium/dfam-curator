@@ -37,7 +37,7 @@ There are three kinds of annotation lines:
 | Prefix  | Meaning                                     |
 |---------|---------------------------------------------|
 | `#=GF`  | Per-**f**ile (record-level) metadata field  |
-| `#=GC`  | Per-**c**olumn annotation (one value per alignment column) |
+| `#=GC`  | Per-**c**olumn annotation (one value per alignment column); Dfam uses `RF` and `MM` |
 | `#=GS`  | Per-**s**equence metadata (not used in Dfam) |
 | `#=GR`  | Per-**r**esidue annotation (not used in Dfam) |
 
@@ -52,11 +52,50 @@ Each aligned sequence is written as a name, whitespace, and the aligned sequence
 GCA_000001405.15:chr1:100-200:+    ACGT..ACGT
 ```
 
-- Gap characters are written as `.` (period).  The `-` character is **not valid** in Dfam
-  seed files; `stk lint` will flag it as an error.
 - All sequence rows in a record must have the same aligned length.
 - Dfam has adopted the **Smitten** identifier format (see
   [MSA Sequence Identifiers](#msa-sequence-identifiers) below).
+
+#### Gap characters
+
+Stockholm permits four gap characters — `-` (dash), `.` (period), `_` (underscore) and
+`~` (tilde) — and `stk` reads all four.  **Dfam has standardized on `.` (period).**  A file
+using any of the others is accepted but `stk lint` reports a warning (`seq_nonstandard_gap`),
+one per sequence row, naming the character it found.
+
+Whitespace is never a gap.
+
+```
+GCA_000001405.15:chr1:100-200:+    ACGT..ACGT      # Dfam convention
+GCA_000001405.15:chr1:100-200:+    ACGT--ACGT      # read, but warned
+```
+
+#### One line per sequence — block format is not accepted
+
+Stockholm allows a long alignment to be split into **blocks**: the alignment is broken into
+column ranges, each sequence appears once per block, and the blocks are separated by blank
+lines.  HMMER and Pfam use this layout.
+
+**Dfam does not accept it.**  Every sequence must appear complete on a single line, however
+long that line becomes.  A blank line separating groups of sequence rows is reported as an
+error (`block_format`):
+
+```
+# Not accepted by Dfam — the blank line splits the alignment into two blocks:
+seq1    ACGTACGT
+seq2    ACGTACGT
+
+seq1    TTTTGGGG
+seq2    TTTTGGGG
+```
+
+When `stk lint` sees this it reports `block_format` and suppresses the alignment-derived
+checks, since a blocked file parses as one row per sequence *per block* — which would
+otherwise produce a cascade of misleading `sq_mismatch` and consensus errors.  Unwrap the
+alignment to one line per sequence and re-run.
+
+A blank line elsewhere in the record — between metadata fields, or immediately before the
+`//` terminator — is harmless and is not flagged.
 
 ### The `#=GC RF` line
 
@@ -65,6 +104,48 @@ sequence of the family (derived from the MSA).  It uses IUPAC/IUB ambiguity code
 columns with mixed bases and `.` for gap-only columns.  In older versions of Dfam 
 Stockholm files the characters `X` or `x` were used to indicate consensus occupancy 
 columns for use with the HMMER hmmbuild tool.
+
+By default the RF line is expected to be the consensus called from the alignment.  A curator
+who has hand-built the consensus instead should say so with the [`CT` field](#ct--consensus-type).
+
+### The `#=GC MM` line
+
+The MM (model mask) line is an optional per-column annotation, defined by HMMER, that marks
+alignment columns lying within a **masked range**:
+
+| Character | Meaning                                              |
+|-----------|------------------------------------------------------|
+| `m`       | The column lies within a masked range                |
+| `.`       | The column is not masked                             |
+
+For a match state built from a masked column, `hmmbuild` emits background frequencies rather
+than the frequencies observed in the alignment.  In other words, the column still contributes
+to the length and architecture of the model, but carries no information content — it neither
+adds to nor subtracts from a match score.  This is the mechanism to use when a region of the
+family should be kept in the model for spacing reasons but should not itself drive matches —
+for example a simple-repeat or otherwise low-complexity stretch that would generate spurious
+hits.
+
+```
+#=GC RF    CAGACTTGATGCACGACGTAAACGTGACT
+#=GC MM    ..........mmmmmmmm...........
+```
+
+Rules:
+
+- Only `m` and `.` are valid characters (lower-case `m`; `stk lint` reports
+  `mm_invalid_chars` otherwise).
+- The line must be exactly as wide as the `#=GC RF` line and the sequence rows
+  (`mm_length_mismatch`).
+- The field is optional.  A record with no `MM` line is treated as fully unmasked.
+
+Note that `stk` writes `#=GC RF` immediately before the sequence rows and any other `#=GC`
+annotation, including `MM`, immediately after them.  Both placements are valid Stockholm and
+are read correctly by HMMER.
+
+Dfam imports only `RF` and `MM`.  Other Stockholm per-column annotations (`SS_cons`,
+`PP_cons`, and so on) are passed through the file but ignored, and `stk lint` notes them with
+an INFO (`unknown_gc_tag`).
 
 ---
 
@@ -163,12 +244,24 @@ an `ERROR` for any record that is missing one.
 The Dfam accession number.  Format: `DF` or `DR` followed by 9 digits, with an optional
 version suffix (e.g. `DF000000001`, `DR000123456.2`).
 
+> **`AC` is assigned by Dfam, not by the submitter.**  It appears only on families that have
+> already been released in the database.  **Do not put an `AC` field on a new submission** —
+> and never invent one.  It is not a required field, and a record without one is perfectly
+> valid.
+
 - Accessions beginning with `DF` are curated families.
 - Accessions beginning with `DR` or "Dfam Raw" families are uncurated families 
   that have been generated by de novo TE identification tools.
 - Records submitted for the first time will not have an `AC` field yet.  Once assigned, `AC`
   becomes the stable, authoritative identifier for the family.
-- Do not invent an accession; leave the field absent until one is officially assigned.
+- The presence of an `AC` is what tells Dfam "this record **replaces** the already-released
+  family with this accession".  An invented accession that happens to be well-formed (e.g.
+  `DR0000001`) is therefore read as an update to a real, unrelated family rather than as a
+  new submission.
+- Because a plausible-looking invented accession cannot be told apart from a real one by format
+  alone, `stk lint` reports an INFO line (`ac_update_records`) counting how many records in the
+  file carry an `AC`, and naming them.  If you did not intend those records to update existing
+  Dfam families, remove the `AC` field.
 
 ### `ID` — Identifier (name)
 
@@ -212,18 +305,38 @@ separators because they appear in some names.
 #=GF AU    Pita Enriquez-Lopez; Weidong Bao
 ```
 
+The older `Last Initial` convention (`Smith J`) is **no longer accepted** — spell out the
+given name.  Multiple `AU` lines are allowed, and each line may itself carry several
+semicolon-separated authors.
+
 Curators who have an ORCID may prefix their name with it:
 
 ```
 #=GF AU    ORCID:0000-0001-2345-6789 Barbara McClintock
+#=GF AU    ORCID:0000-0002-1825-0097 Josiah Carberry; Weidong Bao
 ```
 
-Formats that `stk lint` will flag as warnings:
-- Any period in a name word: `B. McClintock`, `Barbara J. McClintock`, `A.F.A. Smit`
+The ORCID is written as `ORCID:` immediately followed by the bare
+`xxxx-xxxx-xxxx-xxxx` identifier (the final group may end in `X`, the ORCID check digit),
+then a space, then the author's name.  The prefix applies only to the author it precedes,
+so a mix of credited and uncredited authors on one line is fine.  An ORCID must not be
+repeated within a single `AU` field.
+
+ORCIDs are optional but encouraged: they are what lets Dfam credit a curator unambiguously
+rather than guessing among everyone who shares their name.  `stk lint` reports an INFO line
+(`orcid_missing`) counting how many records name at least one author without one.
+
+Formats that `stk lint` flags as **errors**:
 - Single-letter first name: `B McClintock`
-- Old `Last Initial` style: `McClintock B`
+- Old `Last Initial` style: `McClintock B`, `Smith J`
+- The same ORCID used twice in one `AU` field
+
+Formats that `stk lint` flags as **warnings**:
+- Any period in a name word: `B. McClintock`, `Barbara J. McClintock`, `A.F.A. Smit`
 - Comma-separated lists: `Barbara McClintock, Roy Britten`
 - Missing space (single token): `McClintock`
+- A colon outside an `ORCID:` prefix
+- An `ORCID:` prefix with no name after it, or a malformed identifier
 
 A single-letter middle initial *without* a period is accepted: `Barbara B McClintock`.
 
@@ -303,6 +416,41 @@ of Ns.  For example a family with 5bp TSDs would be encoded as:
 ```
 #=GF TD  NNNNN
 ```
+
+### `CT` — Consensus type
+
+Describes how the `#=GC RF` consensus was produced.  The field is optional; when it is
+absent the consensus is assumed to have been called from the alignment by the Dfam
+consensus caller.
+
+The value must be one of a reserved set of words.  At present the only reserved word is:
+
+| Word        | Meaning                                                            |
+|-------------|--------------------------------------------------------------------|
+| `handbuilt` | The consensus was authored or adjusted by a curator, and is not reproducible by calling the consensus from the alignment |
+
+```
+#=GF CT    handbuilt
+```
+
+A curator hand-edits a consensus when the called consensus is not the biologically correct
+one — for example when a substitution in the called consensus introduces a spurious in-frame
+stop codon, or a deletion introduces a frameshift, that the ancestral element would not have
+had.  In such a record the `#=GC RF` line deliberately differs from what the consensus caller
+would produce from the aligned copies.
+
+Effect on `stk lint`:
+
+- `stk lint` normally re-calls the consensus from the alignment and warns
+  (`rf_consensus_mismatch`) when `#=GC RF` disagrees with it.  When `CT` is `handbuilt`
+  that comparison is **skipped**, since a disagreement is the expected state.
+- A `CT` value that is not a reserved word is an error (`ct_unknown`).  The consensus check
+  still runs in that case.
+
+Note that `stk edit --update-consensus` overwrites `#=GC RF` with a freshly called consensus,
+which discards the curator's hand-built version.  Since the stored consensus is then a called
+one, the `CT` field no longer describes it and is removed from the record (a note is written
+to stderr).
 
 ### `KD` — Kimura Divergence
 
@@ -471,11 +619,15 @@ Common issues flagged by `stk lint`:
 | `missing_required_field` | ERROR  | `DE`, `AU`, `TP`, `OC`, or `SQ` is absent     |
 | `rf_missing`           | ERROR    | `#=GC RF` line is absent                       |
 | `sq_mismatch`          | ERROR    | `SQ` count does not match actual sequence rows |
-| `seq_invalid_chars`    | ERROR    | Sequence row contains `-` or `~` instead of `.`|
+| `seq_invalid_chars`    | ERROR    | Sequence row contains a character that is neither an IUB code nor a gap |
+| `seq_nonstandard_gap`  | WARN     | Sequence row uses `-`, `_` or `~` as a gap instead of `.` |
+| `block_format`         | ERROR    | Blank line splits the alignment into interleaved blocks |
 | `id_too_long`          | ERROR    | `ID` exceeds 45 characters                     |
 | `de_too_long`          | ERROR    | `DE` exceeds 80 characters                     |
 | `ac_format`            | ERROR    | `AC` does not match `DF/DR` + 7 or 9 digits    |
 | `duplicate_id`         | ERROR    | Same `ID` used in two records without `AC`     |
+| `ac_update_records`    | INFO     | Count of records carrying an `AC` (these update existing Dfam families) |
+| `orcid_missing`        | INFO     | Count of records naming an author without an ORCID |
 | `au_format`            | ERROR    | `AU` token uses abbreviated/single-letter first name, `Last Initial` style, or duplicate ORCID |
 | `au_format`            | WARN     | `AU` token uses abbreviated initials with periods, commas, colons, or missing space |
 | `ref_block_incomplete` | ERROR    | `RM`/`RD` present without `RN`, or `RN` present without `RM`/`RD` |
@@ -483,7 +635,11 @@ Common issues flagged by `stk lint`:
 | `citation_fields_unused` | WARN   | `RT`/`RA`/`RL` present but not imported by Dfam |
 | `pmid_unknown`         | ERROR    | PubMed ID not found at pubmed.ncbi.nlm.nih.gov (network check) |
 | `doi_unknown`          | ERROR    | DOI could not be resolved via doi.org (network check) |
-| `rf_consensus_mismatch`| WARN     | `#=GC RF` does not match the consensus called from the alignment |
+| `rf_consensus_mismatch`| WARN     | `#=GC RF` does not match the consensus called from the alignment (not checked when `CT` is `handbuilt`) |
+| `ct_unknown`           | ERROR    | `CT` value is not a reserved consensus-type word |
+| `mm_invalid_chars`     | ERROR    | `#=GC MM` contains a character other than `m` or `.` |
+| `mm_length_mismatch`   | ERROR    | `#=GC MM` width differs from `#=GC RF` / the alignment |
+| `unknown_gc_tag`       | INFO     | `#=GC` annotation other than `RF` or `MM` (not imported) |
 | `oc_unknown`           | ERROR    | `OC` value not found in NCBI taxonomy          |
 | `tp_unknown`           | ERROR    | `TP` value not found in Dfam classification    |
 | `id_in_dfam`           | ERROR    | `ID` already exists in Dfam (add `AC` to update)|

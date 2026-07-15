@@ -4,23 +4,60 @@ use std::collections::{HashMap, HashSet};
 use crate::consensus::{build_consensus_from_sequences, ConsensusParams};
 use crate::dfam::cache::Cache;
 use crate::dfam::record::RawDfamRecord;
+use dfam_stk_io::{is_gap, IDVersion, DFAM_GAP};
 
 // ── Character sets ────────────────────────────────────────────────────────────
 
 /// IUPAC/IUB nucleotide codes (upper- and lower-case).
 const IUB: &[u8] = b"ACGTRYSWKMBDHVNacgtrymkswhbvdn";
 
-/// Valid characters in sequence rows: IUB codes and `.`.
-const SEQ_VALID: &[u8] = b"ACGTRYSWKMBDHVNacgtrymkswhbvdn.";
+/// Valid non-gap characters in sequence rows: IUB codes.  Gaps are handled separately,
+/// since Stockholm allows four gap characters but Dfam standardizes on `.` (see `is_gap`).
+const SEQ_VALID: &[u8] = b"ACGTRYSWKMBDHVNacgtrymkswhbvdn";
 
 /// Valid characters in `#=GC RF`: IUB codes, `.`, and `X`/`x`.
 const RF_VALID: &[u8] = b"ACGTRYSWKMBDHVNacgtrymkswhbvdnXx.";
 
+/// Valid characters in `#=GC MM` (HMMER model mask): `m` for a masked column, `.` otherwise.
+const MM_VALID: &[u8] = b"m.";
+
+/// All recognised `#=GC` annotations.
+const KNOWN_GC_TAGS: &[&str] = &["RF", "MM"];
+
 /// All recognised `#=GF` tags (for unknown-tag detection).
 const KNOWN_GF_TAGS: &[&str] = &[
     "AC", "ID", "DE", "AU", "SE", "TP", "OC", "SQ",
-    "TD", "RN", "RT", "RA", "RM", "RL", "RD", "DR", "CC", "**", "KD", "BM",
+    "TD", "CT", "RN", "RT", "RA", "RM", "RL", "RD", "DR", "CC", "**", "KD", "BM",
 ];
+
+// ── Consensus type (`#=GF CT`) ────────────────────────────────────────────────
+
+/// A reserved word for the optional `#=GF CT` (consensus type) field.
+struct ConsensusType {
+    /// The reserved word as it appears in the file (matched case-insensitively).
+    word: &'static str,
+    /// Whether `#=GC RF` is expected to be reproducible by calling the consensus
+    /// from the alignment.  `false` for consensus types that a curator authored
+    /// by hand, where a mismatch with the called consensus is the normal state.
+    rf_is_called: bool,
+}
+
+/// The reserved words accepted in `#=GF CT`.  Extend this list to add new types.
+const CONSENSUS_TYPES: &[ConsensusType] = &[
+    ConsensusType { word: "handbuilt", rf_is_called: false },
+];
+
+fn consensus_type(word: &str) -> Option<&'static ConsensusType> {
+    CONSENSUS_TYPES.iter().find(|ct| ct.word.eq_ignore_ascii_case(word.trim()))
+}
+
+/// `true` if the record's `#=GF CT` marks its `#=GC RF` line as one that was not
+/// called from the alignment (e.g. `handbuilt`), so consensus checks should be skipped.
+pub fn rf_is_handcurated(r: &RawDfamRecord) -> bool {
+    r.gf_first("CT")
+        .and_then(consensus_type)
+        .is_some_and(|ct| !ct.rf_is_called)
+}
 
 // ── Diagnostic types ──────────────────────────────────────────────────────────
 
@@ -100,14 +137,24 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     check_au(record, &mut d);
     check_tp(record, &mut d);
     check_td(record, &mut d);
+    check_ct(record, &mut d);
     check_kd(record, &mut d);
-    check_sq(record, &mut d);
     check_ref_blocks(record, &mut d);
-    check_rf(record, &mut d);
-    check_rf_consensus(record, &mut d);
-    check_sequences(record, &mut d);
+    check_block_format(record, &mut d);
+    check_mm(record, &mut d);
     check_unknown_tags(record, &mut d);
     check_unknown_annotations(record, &mut d);
+
+    // A block-format record parses into one row per sequence *per block*, so every
+    // alignment-derived check would report a downstream artefact of the misparse
+    // (SQ=2 vs "4 rows", a nonsense consensus, ragged lengths) rather than a real
+    // problem.  Report the block format alone and let the curator unwrap the file first.
+    if record.block_separator_line.is_none() {
+        check_sq(record, &mut d);
+        check_rf(record, &mut d);
+        check_rf_consensus(record, &mut d);
+        check_sequences(record, &mut d);
+    }
 
     if let Some(cache) = cache {
         tier2_tp(record, cache, &mut d);
@@ -116,6 +163,162 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     }
 
     d
+}
+
+/// Cross-record check: summarise how many records carry an `AC` field.
+///
+/// An `AC` is not something a submitter assigns — it marks the record as an update
+/// to a family that already exists in Dfam.  Curators sometimes add one because they
+/// assume it is a required field, which would silently turn a new submission into a
+/// replacement of an unrelated family.  Report the count so that is visible.
+///
+/// Returns file-level diagnostics (the caller prints them with label `FILE`).
+pub fn check_ac_summary(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    /// At most this many record→accession pairs are named before eliding the rest.
+    const MAX_LISTED: usize = 5;
+
+    let with_ac: Vec<String> = records
+        .iter()
+        .filter_map(|r| {
+            let ac = r.gf_all("AC").into_iter().find(|ac| !ac.trim().is_empty())?;
+            Some(format!("{} = {}", r.label(), ac.trim()))
+        })
+        .collect();
+
+    if with_ac.is_empty() {
+        return Vec::new();
+    }
+
+    let mut listed = with_ac.iter().take(MAX_LISTED).cloned().collect::<Vec<_>>().join(", ");
+    if with_ac.len() > MAX_LISTED {
+        listed.push_str(&format!(", and {} more", with_ac.len() - MAX_LISTED));
+    }
+
+    let clause = if with_ac.len() == 1 {
+        "1 record carries an AC, so it will replace the released Dfam family it names \
+         rather than create a new one"
+            .to_string()
+    } else {
+        format!(
+            "{} records carry an AC, so they will replace the released Dfam families they \
+             name rather than create new ones",
+            with_ac.len()
+        )
+    };
+
+    vec![info(
+        "ac_update_records",
+        format!(
+            "{}: {}.  Dfam assigns AC on release — remove it from new submissions.",
+            clause, listed,
+        ),
+    )]
+}
+
+/// Cross-record check: encourage ORCIDs by counting records whose `AU` field names
+/// at least one author without one.
+///
+/// An ORCID disambiguates a curator from everyone who shares their name, so Dfam can
+/// credit them reliably.  Supplying one is optional, hence INFO: this reports a count
+/// rather than flagging individual records.
+///
+/// Returns file-level diagnostics (the caller prints them with label `FILE`).
+pub fn check_orcid_summary(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    // A record is "incomplete" if any author token lacks an ORCID: prefix.  Records with
+    // no AU at all are skipped — missing_required_field already covers those.
+    let mut incomplete = 0usize;
+    let mut with_au = 0usize;
+
+    for r in records {
+        let authors: Vec<&str> = r
+            .gf_all("AU")
+            .iter()
+            .flat_map(|au| au.split(';'))
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .collect();
+
+        if authors.is_empty() {
+            continue;
+        }
+        with_au += 1;
+        if authors.iter().any(|t| !t.starts_with("ORCID:")) {
+            incomplete += 1;
+        }
+    }
+
+    if incomplete == 0 {
+        return Vec::new();
+    }
+
+    vec![info(
+        "orcid_missing",
+        format!(
+            "{} of {} records with an AU field name at least one author without an ORCID.  \
+             ORCIDs are optional, but they let Dfam credit curators unambiguously — \
+             prefix the name with the identifier, e.g. \
+             '#=GF AU    ORCID:0000-0001-2345-6789 Barbara McClintock'.",
+            incomplete, with_au,
+        ),
+    )]
+}
+
+/// Cross-record check: report how many records carry sequence identifiers in a
+/// legacy Smitten format (V0/V1, or a mix) rather than the current standard (V2).
+///
+/// Older identifiers such as `chr1:100-200` (V1) or `chr1_100_200` (V0) are still
+/// parseable, and DisCoord can verify their coordinates against a reference — so
+/// this is not an error.  But Dfam stores identifiers in the canonical V2 form
+/// (`assembly:sequence:start-end_orient`, e.g. `hg38:chr1:1000-2000_+`), so report
+/// the count as INFO to nudge curators to upgrade before submission.
+///
+/// A record is counted once regardless of how many of its rows are legacy; rows
+/// whose identifiers are already V2, or that carry no parseable coordinates at all
+/// (bare consensus labels), do not contribute.
+///
+/// Returns file-level diagnostics (the caller prints them with label `FILE`).
+pub fn check_seqid_format_summary(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    /// At most this many record labels are named before eliding the rest.
+    const MAX_LISTED: usize = 5;
+
+    let legacy: Vec<String> = records
+        .iter()
+        .filter(|r| {
+            r.sequences.iter().any(|s| {
+                matches!(
+                    s.inferred_version,
+                    Some(IDVersion::V0 | IDVersion::V1 | IDVersion::Mixed)
+                )
+            })
+        })
+        .map(|r| r.label())
+        .collect();
+
+    if legacy.is_empty() {
+        return Vec::new();
+    }
+
+    let mut listed = legacy.iter().take(MAX_LISTED).cloned().collect::<Vec<_>>().join(", ");
+    if legacy.len() > MAX_LISTED {
+        listed.push_str(&format!(", and {} more", legacy.len() - MAX_LISTED));
+    }
+
+    let clause = if legacy.len() == 1 {
+        "1 record has".to_string()
+    } else {
+        format!("{} records have", legacy.len())
+    };
+
+    vec![info(
+        "seqid_legacy_format",
+        format!(
+            "{} sequence identifiers in a legacy Smitten format (V0/V1): {}.  They \
+             are parseable and their coordinates can be verified, but Dfam stores \
+             identifiers in the standard V2 form (e.g. 'hg38:chr1:1000-2000_+').  \
+             Run the records through DisCoord to rewrite them before submission.",
+            clause, listed,
+        ),
+    )]
 }
 
 /// Cross-record check: report duplicate IDs within a file (case-insensitive).
@@ -349,7 +552,9 @@ fn check_ac(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
             d.push(err(
                 "ac_format",
                 format!(
-                    "AC {:?} does not match DF/DR + 7 or 9 digits (e.g. DF0000001 or DF000000001)",
+                    "AC {:?} does not match DF/DR + 7 or 9 digits (e.g. DF0000001 or \
+                     DF000000001).  AC is assigned by Dfam when a family is released — \
+                     do not provide one for new submissions; remove the field.",
                     ac.trim()
                 ),
             ));
@@ -416,16 +621,32 @@ fn check_se(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Validate every `AU` line on the record.  A record may carry several `AU` lines, and
+/// each line several semicolon-separated authors; ORCID uniqueness is enforced across all
+/// of them, since the same curator credited on two lines is still a duplicate.
 fn check_au(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
-    let Some(au) = r.gf_first("AU") else { return };
-    let au = au.trim();
-    if au.is_empty() {
-        d.push(err("empty_field", "AU field is present but empty"));
+    let au_lines = r.gf_all("AU");
+    if au_lines.is_empty() {
         return;
     }
 
     let mut seen_orcids: Vec<String> = Vec::new();
 
+    for au in au_lines {
+        let au = au.trim();
+        if au.is_empty() {
+            d.push(err("empty_field", "AU field is present but empty"));
+            continue;
+        }
+        check_au_line(au, &mut seen_orcids, d);
+    }
+}
+
+/// Validate one `AU` line's worth of semicolon-separated authors.
+///
+/// `seen_orcids` accumulates across the record's `AU` lines so duplicates are caught
+/// wherever they appear.
+fn check_au_line(au: &str, seen_orcids: &mut Vec<String>, d: &mut Vec<Diagnostic>) {
     for raw_token in au.split(';') {
         let token = raw_token.trim();
         if token.is_empty() {
@@ -458,7 +679,7 @@ fn check_au(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                 if seen_orcids.contains(&orcid_upper) {
                     d.push(err(
                         "au_format",
-                        format!("AU ORCID {:?} appears more than once in this AU field", orcid),
+                        format!("AU ORCID {:?} appears more than once in this record", orcid),
                     ));
                 } else {
                     seen_orcids.push(orcid_upper);
@@ -572,6 +793,27 @@ fn check_td(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                 format!("TD contains invalid character {:?} (only IUB codes allowed)", bad),
             ));
         }
+    }
+}
+
+fn check_ct(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    let Some(ct) = r.gf_first("CT") else { return };
+    let value = ct.trim();
+
+    if value.is_empty() {
+        d.push(err("empty_field", "CT field is present but empty"));
+        return;
+    }
+    if consensus_type(value).is_none() {
+        let known: Vec<&str> = CONSENSUS_TYPES.iter().map(|c| c.word).collect();
+        d.push(err(
+            "ct_unknown",
+            format!(
+                "CT value {:?} is not a recognised consensus type (allowed: {})",
+                value,
+                known.join(", ")
+            ),
+        ));
     }
 }
 
@@ -690,7 +932,52 @@ fn check_rf(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Validate the optional `#=GC MM` model mask line (HMMER).
+///
+/// Each column is `m` (the column lies in a masked range, so hmmbuild emits background
+/// frequencies for the corresponding match state) or `.` (unmasked).  The line must be
+/// the same width as the rest of the alignment.
+fn check_mm(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    let Some(mm) = r.gc.get("MM") else { return };
+
+    if let Some(bad) = first_invalid(mm, MM_VALID) {
+        d.push(err(
+            "mm_invalid_chars",
+            format!(
+                "#=GC MM contains invalid character {:?}; only 'm' (masked column) \
+                 and '.' (unmasked) are allowed",
+                bad
+            ),
+        ));
+    }
+
+    // Width must agree with the alignment.  Prefer RF as the reference width when present,
+    // since check_rf has already compared it against every sequence row.
+    let (expected, what) = match r.gc.get("RF") {
+        Some(rf) => (rf.len(), "#=GC RF"),
+        None => match r.sequences.first() {
+            Some(row) => (row.aligned_seq.len(), "the alignment"),
+            None => return,
+        },
+    };
+
+    if mm.len() != expected {
+        d.push(err(
+            "mm_length_mismatch",
+            format!(
+                "#=GC MM length {} does not match {} length {}",
+                mm.len(), what, expected
+            ),
+        ));
+    }
+}
+
 fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    // A hand-curated consensus is not expected to reproduce the called one.
+    if rf_is_handcurated(r) {
+        return;
+    }
+
     let rf = match r.gc.get("RF") {
         Some(rf) if !rf.is_empty() => rf,
         _ => return,
@@ -699,9 +986,9 @@ fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
         return;
     }
 
-    // Sequences in STK files use '.' for gaps; the consensus builder uses '-'.
+    // STK files may use any Stockholm gap character; the consensus builder uses '-'.
     let converted: Vec<Vec<u8>> = r.sequences.iter()
-        .map(|row| row.aligned_seq.bytes().map(|b| if b == b'.' { b'-' } else { b }).collect())
+        .map(|row| row.aligned_seq.bytes().map(|b| if is_gap(b) { b'-' } else { b }).collect())
         .collect();
     let raw_seqs: Vec<&[u8]> = converted.iter().map(|v| v.as_slice()).collect();
     let called = build_consensus_from_sequences(&raw_seqs, &ConsensusParams::default());
@@ -725,31 +1012,65 @@ fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Reject HMMER's interleaved *block* format.
+///
+/// Stockholm permits an alignment to be split into blocks separated by blank lines, with
+/// every sequence appearing once per block.  Dfam does not accept this: each sequence must
+/// appear complete on a single line.  The parser records the blank line that separated two
+/// groups of sequence rows.
+fn check_block_format(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    if let Some(line) = r.block_separator_line {
+        d.push(err(
+            "block_format",
+            format!(
+                "blank line at line {} splits the sequence section into blocks; \
+                 Stockholm interleaved block format is not supported by Dfam — \
+                 each sequence must appear complete on its own single line",
+                line
+            ),
+        ));
+    }
+}
+
 fn check_sequences(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     let mut first_len: Option<usize> = None;
 
     for row in &r.sequences {
-        // Character validation: report the first bad character per sequence.
+        // Character validation: report the first bad character per sequence, and
+        // separately the first non-'.' gap character (legal Stockholm, but not the
+        // Dfam convention).
+        let mut nonstandard_gap: Option<char> = None;
+
         for (pos, &b) in row.aligned_seq.as_bytes().iter().enumerate() {
+            if is_gap(b) {
+                if b != DFAM_GAP && nonstandard_gap.is_none() {
+                    nonstandard_gap = Some(b as char);
+                }
+                continue;
+            }
             if !SEQ_VALID.contains(&b) {
-                let bad = b as char;
-                let hint = if bad == '-' || bad == '~' {
-                    format!(" ({:?} is not valid; use '.' for gaps)", bad)
-                } else {
-                    String::new()
-                };
                 d.push(err(
                     "seq_invalid_chars",
                     format!(
-                        "sequence {:?} contains invalid character {:?} at position {}{}",
+                        "sequence {:?} contains invalid character {:?} at position {}",
                         row.original_id,
-                        bad,
+                        b as char,
                         pos + 1,
-                        hint,
                     ),
                 ));
                 break;
             }
+        }
+
+        if let Some(gap) = nonstandard_gap {
+            d.push(warn(
+                "seq_nonstandard_gap",
+                format!(
+                    "sequence {:?} uses {:?} as a gap character; Stockholm permits \
+                     '-', '.', '_' and '~', but Dfam has standardized on '.'",
+                    row.original_id, gap,
+                ),
+            ));
         }
 
         // All sequences must be the same aligned length.  When RF is present,
@@ -782,6 +1103,24 @@ fn check_unknown_tags(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                 format!("unrecognised #=GF tag {:?} (possible typo?)", tag),
             ));
         }
+    }
+
+    // Dfam consumes only RF and MM; other Stockholm #=GC annotations (SS_cons, PP_cons, …)
+    // are carried through the file but ignored on import.
+    let mut unknown: Vec<&str> = r.gc.keys()
+        .map(String::as_str)
+        .filter(|tag| !KNOWN_GC_TAGS.contains(tag))
+        .collect();
+    unknown.sort_unstable();
+    for tag in unknown {
+        d.push(info(
+            "unknown_gc_tag",
+            format!(
+                "unrecognised #=GC annotation {:?}; Dfam uses RF (consensus) and \
+                 MM (model mask) — others are not imported",
+                tag
+            ),
+        ));
     }
 }
 
@@ -1080,25 +1419,139 @@ mod tests {
     }
 
     #[test]
-    fn seq_dash_is_error() {
+    fn seq_dash_gap_warns() {
+        // '-' is a legal Stockholm gap, but Dfam standardizes on '.': WARN, not ERROR.
         let r = make_record(
             &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1")],
             Some("ACGT"),
             &[("s1","AC-T")],
         );
         let diags = lint_record(&r, None);
-        assert!(has_check(&diags, "seq_invalid_chars"));
+        assert!(!has_check(&diags, "seq_invalid_chars"), "{:?}", diags);
+        let g = diags.iter().find(|d| d.check == "seq_nonstandard_gap").expect("expected warn");
+        assert_eq!(g.severity, Severity::Warn);
+        assert!(g.message.contains("'-'"), "{}", g.message);
     }
 
     #[test]
-    fn seq_tilde_is_error() {
+    fn seq_tilde_and_underscore_gaps_warn() {
+        for gap in ["AC~T", "AC_T"] {
+            let r = make_record(
+                &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1")],
+                Some("ACGT"),
+                &[("s1", gap)],
+            );
+            let diags = lint_record(&r, None);
+            assert!(!has_check(&diags, "seq_invalid_chars"), "{}: {:?}", gap, diags);
+            assert!(has_check(&diags, "seq_nonstandard_gap"), "{}: {:?}", gap, diags);
+        }
+    }
+
+    #[test]
+    fn seq_dot_gap_is_clean() {
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1")],
+            Some("AC.T"),
+            &[("s1","AC.T")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "seq_nonstandard_gap"), "{:?}", diags);
+        assert!(!has_check(&diags, "seq_invalid_chars"), "{:?}", diags);
+    }
+
+    #[test]
+    fn seq_truly_invalid_char_is_still_error() {
+        // '*' is not a residue and not a gap.
         let r = make_record(
             &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1")],
             Some("ACGT"),
-            &[("s1","AC~T")],
+            &[("s1","AC*T")],
         );
         let diags = lint_record(&r, None);
-        assert!(has_check(&diags, "seq_invalid_chars"));
+        assert!(has_check(&diags, "seq_invalid_chars"), "{:?}", diags);
+    }
+
+    #[test]
+    fn nonstandard_gap_reported_once_per_sequence() {
+        // Many gaps in one row produce a single warning, not one per column.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1")],
+            Some("ACGTACGT"),
+            &[("s1","A--T--GT")],
+        );
+        let diags = lint_record(&r, None);
+        let n = diags.iter().filter(|d| d.check == "seq_nonstandard_gap").count();
+        assert_eq!(n, 1, "{:?}", diags);
+    }
+
+    #[test]
+    fn dash_gapped_alignment_still_consensus_checked() {
+        // Gaps written as '-' must be understood as gaps by the consensus caller,
+        // not treated as residues.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("AC.T"),
+            &[("s1","AC-T"),("s2","AC-T"),("s3","AC-T"),("s4","AC-T")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn block_format_is_error() {
+        let stk = "\
+# STOCKHOLM 1.0\n\
+#=GF DE    Test family\n\
+#=GF AU    Barbara McClintock\n\
+#=GF TP    X\n\
+#=GF OC    Mus musculus\n\
+#=GF SQ    2\n\
+s1         ACGT\n\
+s2         ACGT\n\
+\n\
+s1         TTTT\n\
+s2         TTTT\n\
+//\n";
+        let diags = lint_stk(stk);
+        assert!(has_check(&diags, "block_format"), "{:?}", diags);
+        let d = diags.iter().find(|d| d.check == "block_format").unwrap();
+        assert_eq!(d.severity, Severity::Error);
+        assert!(d.message.contains("line 9"), "{}", d.message);
+    }
+
+    #[test]
+    fn trailing_blank_line_is_not_block_format() {
+        // A blank line before '//' separates nothing and must not be flagged.
+        let stk = "\
+# STOCKHOLM 1.0\n\
+#=GF DE    Test family\n\
+#=GF AU    Barbara McClintock\n\
+#=GF TP    X\n\
+#=GF OC    Mus musculus\n\
+#=GF SQ    1\n\
+#=GC RF    ACGT\n\
+s1         ACGT\n\
+\n\
+//\n";
+        let diags = lint_stk(stk);
+        assert!(!has_check(&diags, "block_format"), "{:?}", diags);
+    }
+
+    #[test]
+    fn blank_line_among_header_fields_is_not_block_format() {
+        let stk = "\
+# STOCKHOLM 1.0\n\
+#=GF DE    Test family\n\
+\n\
+#=GF AU    Barbara McClintock\n\
+#=GF TP    X\n\
+#=GF OC    Mus musculus\n\
+#=GF SQ    1\n\
+#=GC RF    ACGT\n\
+s1         ACGT\n\
+//\n";
+        let diags = lint_stk(stk);
+        assert!(!has_check(&diags, "block_format"), "{:?}", diags);
     }
 
     #[test]
@@ -1230,6 +1683,315 @@ s1          ACGT\n\
             &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
             Some("AxGT"),
             &[("s1","A.GT"),("s2","A.GT"),("s3","A.GT"),("s4","A.GT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    /// Parse a one-record Stockholm string and lint it.
+    fn lint_stk(stk: &str) -> Vec<Diagnostic> {
+        use std::io::Cursor;
+        use crate::dfam::record::iter_records;
+        let records: Vec<_> = iter_records(Cursor::new(stk))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        lint_record(&records[0], None)
+    }
+
+    /// A minimal valid record with the given extra annotation lines spliced in.
+    fn stk_with(extra: &str) -> String {
+        format!(
+            "# STOCKHOLM 1.0\n\
+             #=GF DE    Test family\n\
+             #=GF AU    Barbara McClintock\n\
+             #=GF TP    X\n\
+             #=GF OC    Mus musculus\n\
+             #=GF SQ    1\n\
+             #=GC RF    ACGTACGT\n\
+             {}\
+             s1         ACGTACGT\n\
+             //\n",
+            extra
+        )
+    }
+
+    #[test]
+    fn mm_valid_is_accepted() {
+        let diags = lint_stk(&stk_with("#=GC MM    ..mmmm..\n"));
+        assert!(!has_check(&diags, "mm_invalid_chars"), "{:?}", diags);
+        assert!(!has_check(&diags, "mm_length_mismatch"), "{:?}", diags);
+        assert!(!has_check(&diags, "unknown_gc_tag"), "{:?}", diags);
+    }
+
+    #[test]
+    fn mm_absent_is_fine() {
+        let diags = lint_stk(&stk_with(""));
+        assert!(!has_check(&diags, "mm_invalid_chars"), "{:?}", diags);
+        assert!(!has_check(&diags, "mm_length_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn mm_invalid_char_is_error() {
+        // 'M' uppercase and 'x' are not valid mask characters; only 'm' and '.'.
+        let diags = lint_stk(&stk_with("#=GC MM    ..MMMM..\n"));
+        assert!(has_check(&diags, "mm_invalid_chars"), "{:?}", diags);
+        let d = diags.iter().find(|d| d.check == "mm_invalid_chars").unwrap();
+        assert_eq!(d.severity, Severity::Error);
+    }
+
+    #[test]
+    fn mm_length_mismatch_is_error() {
+        let diags = lint_stk(&stk_with("#=GC MM    ..mm\n"));
+        assert!(has_check(&diags, "mm_length_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
+    fn unknown_gc_tag_is_info() {
+        let diags = lint_stk(&stk_with("#=GC SS_cons    ........\n"));
+        assert!(has_check(&diags, "unknown_gc_tag"), "{:?}", diags);
+        let d = diags.iter().find(|d| d.check == "unknown_gc_tag").unwrap();
+        assert_eq!(d.severity, Severity::Info);
+    }
+
+    #[test]
+    fn au_second_line_is_validated() {
+        // The first AU line is well-formed; the second uses the old 'Last Initial' style.
+        let r = make_record(
+            &[("DE","x"),("AU","Barbara McClintock"),("AU","Smith J"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = lint_record(&r, None);
+        let au: Vec<&Diagnostic> = diags.iter().filter(|d| d.check == "au_format").collect();
+        assert_eq!(au.len(), 1, "{:?}", diags);
+        assert_eq!(au[0].severity, Severity::Error);
+        assert!(au[0].message.contains("Smith J"), "{}", au[0].message);
+    }
+
+    #[test]
+    fn au_duplicate_orcid_across_lines_is_error() {
+        let r = make_record(
+            &[("DE","x"),
+              ("AU","ORCID:0000-0001-2345-6789 Barbara McClintock"),
+              ("AU","ORCID:0000-0001-2345-6789 Roy Britten"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = lint_record(&r, None);
+        let dup = diags.iter().find(|d| d.check == "au_format").expect("expected au_format");
+        assert_eq!(dup.severity, Severity::Error);
+        assert!(dup.message.contains("more than once"), "{}", dup.message);
+    }
+
+    #[test]
+    fn au_multiple_valid_lines_are_clean() {
+        let r = make_record(
+            &[("DE","x"),
+              ("AU","ORCID:0000-0001-2345-6789 Barbara McClintock; Roy Britten"),
+              ("AU","ORCID:0000-0002-1825-0097 Josiah Carberry"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "au_format"), "{:?}", diags);
+    }
+
+    #[test]
+    fn orcid_summary_counts_records_missing_orcids() {
+        let no_orcid = make_record(
+            &[("DE","x"),("AU","Barbara McClintock"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let with_orcid = make_record(
+            &[("DE","x"),("AU","ORCID:0000-0001-2345-6789 Barbara McClintock"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = check_orcid_summary(&[no_orcid, with_orcid]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].check, "orcid_missing");
+        assert_eq!(diags[0].severity, Severity::Info);
+        assert!(diags[0].message.starts_with("1 of 2 records"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn orcid_summary_flags_record_where_only_some_authors_have_orcids() {
+        let r = make_record(
+            &[("DE","x"),("AU","ORCID:0000-0001-2345-6789 Barbara McClintock; Roy Britten"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = check_orcid_summary(&[r]);
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.starts_with("1 of 1 records"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn orcid_summary_silent_when_all_authors_credited() {
+        // Multiple AU lines, every author carrying an ORCID.
+        let r = make_record(
+            &[("DE","x"),
+              ("AU","ORCID:0000-0001-2345-6789 Barbara McClintock"),
+              ("AU","ORCID:0000-0002-1825-0097 Josiah Carberry"),
+              ("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        assert!(check_orcid_summary(&[r]).is_empty());
+    }
+
+    #[test]
+    fn orcid_summary_ignores_records_without_au() {
+        // Missing AU is already an error; it should not inflate the ORCID denominator.
+        let no_au = make_record(
+            &[("DE","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let no_orcid = make_record(
+            &[("DE","x"),("AU","Barbara McClintock"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = check_orcid_summary(&[no_au, no_orcid]);
+        assert!(diags[0].message.starts_with("1 of 1 records"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn ac_summary_counts_update_records() {
+        let with_ac = make_record(
+            &[("AC","DR000000001"),("ID","famA"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let without_ac = make_record(
+            &[("ID","famB"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = check_ac_summary(&[with_ac, without_ac]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].check, "ac_update_records");
+        assert_eq!(diags[0].severity, Severity::Info);
+        assert!(diags[0].message.starts_with("1 record carries an AC"), "{}", diags[0].message);
+        // The accession itself is named, not just the record label.
+        assert!(diags[0].message.contains("famA = DR000000001")
+                || diags[0].message.contains("DR000000001"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn ac_summary_silent_when_no_ac() {
+        let r = make_record(
+            &[("ID","famA"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        assert!(check_ac_summary(&[r]).is_empty());
+    }
+
+    #[test]
+    fn ac_summary_ignores_empty_ac() {
+        // An empty AC is already reported per-record as empty_field; it is not an update.
+        let r = make_record(
+            &[("AC","  "),("ID","famA"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        assert!(check_ac_summary(&[r]).is_empty());
+    }
+
+    /// Build a record whose sequence rows are parsed by Smitten (so `inferred_version`
+    /// is populated), unlike `make_record` which uses `new_raw`.
+    fn record_with_seq_ids(ids: &[&str]) -> RawDfamRecord {
+        let mut r = RawDfamRecord::default();
+        r.record_num = 1;
+        r.header = "# STOCKHOLM 1.0".to_string();
+        r.terminated = true;
+        r.gf.push(("ID".to_string(), "famA".to_string()));
+        for id in ids {
+            r.sequences.push(SeqRow::from_name_seq(id, "ACGT"));
+        }
+        r
+    }
+
+    #[test]
+    fn seqid_summary_flags_legacy_v1_identifier() {
+        // `chr1:100-200` (no strand suffix) is V1: parseable, but not the V2 standard.
+        let r = record_with_seq_ids(&["chr1:100-200"]);
+        assert_eq!(r.sequences[0].inferred_version, Some(IDVersion::V1));
+        let diags = check_seqid_format_summary(&[r]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].check, "seqid_legacy_format");
+        assert_eq!(diags[0].severity, Severity::Info);
+        assert!(diags[0].message.starts_with("1 record has"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn seqid_summary_flags_legacy_v0_identifier() {
+        // `chr1_100_200` uses underscore separators: V0.
+        let r = record_with_seq_ids(&["chr1_100_200"]);
+        assert_eq!(r.sequences[0].inferred_version, Some(IDVersion::V0));
+        let diags = check_seqid_format_summary(&[r]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].check, "seqid_legacy_format");
+    }
+
+    #[test]
+    fn seqid_summary_silent_for_v2_identifiers() {
+        // `hg38:chr1:1000-2000_+` is the standard V2 form — no diagnostic.
+        let r = record_with_seq_ids(&["hg38:chr1:1000-2000_+"]);
+        assert_eq!(r.sequences[0].inferred_version, Some(IDVersion::V2));
+        assert!(check_seqid_format_summary(&[r]).is_empty());
+    }
+
+    #[test]
+    fn seqid_summary_counts_each_record_once() {
+        // A record with both a legacy and a V2 row is counted a single time.
+        let mixed_rows = record_with_seq_ids(&["chr1:100-200", "hg38:chr1:1000-2000_+"]);
+        let clean = record_with_seq_ids(&["hg38:chr2:5-9_-"]);
+        let diags = check_seqid_format_summary(&[mixed_rows, clean]);
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.starts_with("1 record has"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn ct_handbuilt_skips_consensus_check() {
+        // RF disagrees with the called consensus, but CT declares it hand-built.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4"),("CT","handbuilt")],
+            Some("TTTT"),
+            &[("s1","ACGT"),("s2","ACGT"),("s3","ACGT"),("s4","ACGT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+        assert!(!has_check(&diags, "unknown_gf_tag"), "{:?}", diags);
+    }
+
+    #[test]
+    fn ct_unknown_word_is_error() {
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1"),("CT","artisanal")],
+            Some("ACGT"),
+            &[("s1","ACGT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "ct_unknown"), "{:?}", diags);
+        // An unrecognised CT does not suppress the consensus check.
+        let d = diags.iter().find(|d| d.check == "ct_unknown").unwrap();
+        assert_eq!(d.severity, Severity::Error);
+        assert!(d.message.contains("handbuilt"), "{}", d.message);
+    }
+
+    #[test]
+    fn ct_empty_is_error() {
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","1"),("CT","")],
+            Some("ACGT"),
+            &[("s1","ACGT")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(has_check(&diags, "empty_field"), "{:?}", diags);
+    }
+
+    #[test]
+    fn ct_absent_still_checks_consensus() {
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("TTTT"),
+            &[("s1","ACGT"),("s2","ACGT"),("s3","ACGT"),("s4","ACGT")],
         );
         let diags = lint_record(&r, None);
         assert!(has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);

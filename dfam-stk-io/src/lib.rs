@@ -8,6 +8,21 @@ use smitten::Identifier;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 
+// ── Gap characters ────────────────────────────────────────────────────────────
+
+/// Gap characters accepted by Stockholm: dash, period, underscore, and tilde.
+///
+/// Dfam has standardized on `.`; the others are read but `stk lint` warns about them.
+pub const GAP_CHARS: &[u8] = b"-._~";
+
+/// The gap character Dfam writes.
+pub const DFAM_GAP: u8 = b'.';
+
+/// `true` if `b` is any of the Stockholm gap characters.
+pub fn is_gap(b: u8) -> bool {
+    GAP_CHARS.contains(&b)
+}
+
 // ── SeqRow ────────────────────────────────────────────────────────────────────
 
 /// One sequence row from a Stockholm alignment block.
@@ -105,6 +120,11 @@ pub struct StkRecord {
     /// `true` when the record was closed by a `//` line; `false` when EOF
     /// was reached without a terminator.
     pub terminated: bool,
+    /// Line number of a blank line that separates two groups of sequence rows —
+    /// i.e. the record is written in HMMER's interleaved *block* format, which Dfam
+    /// does not accept.  `None` for a normal record; a trailing blank line before
+    /// `//` does not count, since it separates nothing.
+    pub block_separator_line: Option<usize>,
 }
 
 impl StkRecord {
@@ -227,6 +247,10 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
 
         let mut in_record = false;
         let mut record = StkRecord::default();
+        // Line number of the most recent blank line seen after a sequence row.  It only
+        // proves block format once another sequence row follows it, so it is held here
+        // until that happens; a blank line before `//` is simply trailing whitespace.
+        let mut pending_blank: Option<usize> = None;
 
         loop {
             let mut line = String::new();
@@ -262,6 +286,9 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
             }
 
             if trimmed.is_empty() {
+                if !record.sequences.is_empty() && pending_blank.is_none() {
+                    pending_blank = Some(self.line_num);
+                }
                 continue;
             }
 
@@ -301,6 +328,11 @@ impl<R: BufRead> Iterator for StkRecordIter<R> {
             // separate rows, never concatenated.
             let mut it = trimmed.splitn(2, char::is_whitespace);
             if let (Some(name), Some(seq)) = (it.next(), it.next()) {
+                // A sequence row following a blank line means the blank line separated
+                // two groups of rows: this is interleaved block format.
+                if let Some(blank) = pending_blank.take() {
+                    record.block_separator_line.get_or_insert(blank);
+                }
                 let seq = seq.trim();
                 let row = if self.parse_sequences {
                     SeqRow::from_name_seq(name, seq)
