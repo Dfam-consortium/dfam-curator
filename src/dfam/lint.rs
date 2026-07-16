@@ -1229,25 +1229,36 @@ fn tier2_tp(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
 }
 
 fn tier2_oc(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
-    let Some(ref tax) = cache.taxonomy else { return };
-
     for oc in r.gf_all("OC") {
-        let oc = oc.trim();
-        if oc.is_empty() || tax.contains(oc) {
-            continue;
+        if let Some(msg) = check_taxon_name(oc, cache) {
+            d.push(err("oc_unknown", format!("OC {}", msg)));
         }
-
-        let hint = suggest_taxon(oc, cache);
-        let msg = if hint.is_empty() {
-            format!("OC {:?} is not a recognised NCBI scientific taxon name", oc)
-        } else {
-            format!(
-                "OC {:?} is not a recognised NCBI scientific taxon name; {}",
-                oc, hint
-            )
-        };
-        d.push(err("oc_unknown", msg));
     }
+}
+
+/// Validate a single taxon name against the NCBI taxonomy cache.
+///
+/// Returns `None` when the name is a recognised NCBI scientific taxon, is blank,
+/// or when no taxonomy data is loaded (the check is skipped, like the tier-2 lint
+/// checks).  Otherwise returns a human-readable message — the quoted name plus a
+/// "did you mean" suggestion when one can be made — with no field prefix, so
+/// callers can prepend their own context (e.g. `OC ` or `stk repbase-import: `).
+pub fn check_taxon_name(name: &str, cache: &Cache) -> Option<String> {
+    let tax = cache.taxonomy.as_ref()?;
+    let name = name.trim();
+    if name.is_empty() || tax.contains(name) {
+        return None;
+    }
+
+    let hint = suggest_taxon(name, cache);
+    Some(if hint.is_empty() {
+        format!("{:?} is not a recognised NCBI scientific taxon name", name)
+    } else {
+        format!(
+            "{:?} is not a recognised NCBI scientific taxon name; {}",
+            name, hint
+        )
+    })
 }
 
 /// Build a suggestion string for an unrecognised OC value.
@@ -1317,22 +1328,31 @@ fn fuzzy_taxon_matches(query: &str, tax: &HashSet<String>) -> Vec<(String, f64)>
     hits
 }
 
+/// True when `name` is already in use as a family ID in Dfam.
+///
+/// Matching is case-insensitive (the cache stores names lowercased).  Returns
+/// `false` for a blank name, or when the Dfam names cache is not loaded — in
+/// that case the check is simply skipped rather than reported as a collision.
+pub fn dfam_name_exists(name: &str, cache: &Cache) -> bool {
+    let Some(ref names) = cache.dfam_names else { return false };
+    let name = name.trim();
+    !name.is_empty() && names.contains(&name.to_lowercase())
+}
+
 fn tier2_id(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
-    if let Some(ref names) = cache.dfam_names {
-        if let Some(id) = r.gf_first("ID") {
-            let id = id.trim();
-            if !id.is_empty() && names.contains(&id.to_lowercase()) {
-                if r.gf_has("AC") {
-                    d.push(info(
-                        "id_in_dfam_update",
-                        format!("ID {:?} already exists in Dfam; AC present — treating as an update record", id),
-                    ));
-                } else {
-                    d.push(err(
-                        "id_in_dfam",
-                        format!("ID {:?} already exists in Dfam; add AC to mark as an update, or use a unique ID", id),
-                    ));
-                }
+    if let Some(id) = r.gf_first("ID") {
+        let id = id.trim();
+        if dfam_name_exists(id, cache) {
+            if r.gf_has("AC") {
+                d.push(info(
+                    "id_in_dfam_update",
+                    format!("ID {:?} already exists in Dfam; AC present — treating as an update record", id),
+                ));
+            } else {
+                d.push(err(
+                    "id_in_dfam",
+                    format!("ID {:?} already exists in Dfam; add AC to mark as an update, or use a unique ID", id),
+                ));
             }
         }
     }
@@ -2157,6 +2177,69 @@ s1          ACGT\n\
         let oc_diag = diags.iter().find(|d| d.check == "oc_unknown").unwrap();
         assert!(oc_diag.message.contains("Rattus norvegicus"), "{}", oc_diag.message);
         assert!(oc_diag.message.contains("common name"), "{}", oc_diag.message);
+    }
+
+    #[test]
+    fn check_taxon_name_accepts_known_rejects_unknown_and_skips_without_cache() {
+        let mut tax = HashSet::new();
+        tax.insert("Homo sapiens".to_string());
+        let mut common = HashMap::new();
+        common.insert("human".to_string(), "Homo sapiens".to_string());
+
+        let cache = Cache {
+            classification: None,
+            taxonomy: Some(tax),
+            taxonomy_common: Some(common),
+            dfam_names: None,
+        };
+
+        // Known scientific name, surrounding whitespace, and blanks → no message.
+        assert_eq!(check_taxon_name("Homo sapiens", &cache), None);
+        assert_eq!(check_taxon_name("  Homo sapiens  ", &cache), None);
+        assert_eq!(check_taxon_name("   ", &cache), None);
+
+        // Unknown name → message, with no field prefix so callers add their own.
+        let msg = check_taxon_name("human", &cache).expect("expected a message");
+        assert!(msg.starts_with("\"human\""), "{}", msg);
+        assert!(msg.contains("Homo sapiens"), "{}", msg);
+        assert!(msg.contains("common name"), "{}", msg);
+
+        // No taxonomy loaded → check is skipped entirely.
+        let empty = Cache {
+            classification: None,
+            taxonomy: None,
+            taxonomy_common: None,
+            dfam_names: None,
+        };
+        assert_eq!(check_taxon_name("Nonesuch fakensis", &empty), None);
+    }
+
+    #[test]
+    fn dfam_name_exists_is_case_insensitive_and_skips_without_cache() {
+        let mut names = HashSet::new();
+        names.insert("l1hs".to_string()); // cache stores names lowercased
+
+        let cache = Cache {
+            classification: None,
+            taxonomy: None,
+            taxonomy_common: None,
+            dfam_names: Some(names),
+        };
+
+        assert!(dfam_name_exists("l1hs", &cache));
+        assert!(dfam_name_exists("L1HS", &cache));
+        assert!(dfam_name_exists("  L1Hs  ", &cache));
+        assert!(!dfam_name_exists("Mariner-N5_CyaStr", &cache));
+        assert!(!dfam_name_exists("   ", &cache));
+
+        // No names cache loaded → check is skipped, not reported as a collision.
+        let empty = Cache {
+            classification: None,
+            taxonomy: None,
+            taxonomy_common: None,
+            dfam_names: None,
+        };
+        assert!(!dfam_name_exists("L1HS", &empty));
     }
 
     #[test]

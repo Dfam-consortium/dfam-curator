@@ -22,8 +22,8 @@ use dfam_curator::{
         edit::{apply_ops, Op},
         lint::{check_ac_summary, check_automated_name_summary, check_citations_network,
                check_duplicate_ids, check_orcid_summary, check_seqid_format_summary,
-               check_unused_citation_fields, lint_record, rf_is_handcurated,
-               Diagnostic, Severity},
+               check_taxon_name, check_unused_citation_fields, dfam_name_exists,
+               lint_record, rf_is_handcurated, Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
         repbase::{to_stk_record, RepbaseImport},
     },
@@ -950,6 +950,28 @@ struct RepbaseImportArgs {
     /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
     #[arg(long)]
     no_clean: bool,
+
+    /// Override the cache directory for the NCBI taxonomy data used to validate
+    /// the Repbase organism (OS).  Defaults to $STK_CACHE_DIR, then ~/.cache/stk.
+    #[arg(long)]
+    cache_dir: Option<PathBuf>,
+
+    /// Suppress informational notices about missing tier-2 cache files.
+    #[arg(long)]
+    no_cache_warn: bool,
+
+    /// Force-download the tier-2 cache files unconditionally before importing,
+    /// ignoring the 60-day staleness threshold.
+    #[arg(long)]
+    force_update_cache: bool,
+
+    /// Skip validating the Repbase organism (OS) against the NCBI taxonomy.
+    #[arg(long)]
+    no_taxon_check: bool,
+
+    /// Skip checking the Repbase family name (ID) for collisions with Dfam.
+    #[arg(long)]
+    no_name_check: bool,
 }
 
 fn run_repbase_import(args: RepbaseImportArgs) -> anyhow::Result<()> {
@@ -961,6 +983,54 @@ fn run_repbase_import(args: RepbaseImportArgs) -> anyhow::Result<()> {
     let RepbaseImport { mut record, warnings } = to_stk_record(&family, &msa);
     for w in &warnings {
         eprintln!("stk repbase-import: {}", w);
+    }
+
+    // Tier-2 checks against the cached external databases, mirroring `stk lint`:
+    // the organism (OS → #=GF OC) against NCBI taxonomy, and the family name
+    // (ID → #=GF ID) against existing Dfam names.  Both are warnings, not errors:
+    // the record is still written so the curator can correct it.
+    if !args.no_taxon_check || !args.no_name_check {
+        let cdir = args.cache_dir.unwrap_or_else(cache_dir);
+        let mode = if args.force_update_cache { RefreshMode::Force } else { RefreshMode::Auto };
+        refresh_cache(&cdir, mode);
+        let cache = load_cache(&cdir);
+
+        // Report only the caches backing the checks actually being run; the others
+        // (TP classification) support lint checks repbase-import does not perform.
+        if !args.no_cache_warn {
+            if !args.no_taxon_check && cache.taxonomy.is_none() {
+                eprintln!(
+                    "INFO  [cache] {:?} not found — OS NCBI taxonomy validation will be \
+                     skipped (run update-cache to populate)",
+                    cdir.join("taxonomy.tsv")
+                );
+            }
+            if !args.no_name_check && cache.dfam_names.is_none() {
+                eprintln!(
+                    "INFO  [cache] {:?} not found — ID collision check against Dfam will \
+                     be skipped (run update-cache to populate)",
+                    cdir.join("dfam-names.txt")
+                );
+            }
+        }
+
+        if !args.no_taxon_check {
+            if let Some(os) = &family.organism {
+                if let Some(msg) = check_taxon_name(os, &cache) {
+                    eprintln!("stk repbase-import: OS {}", msg);
+                }
+            }
+        }
+
+        // repbase-import never emits an AC, so a hit is always a real collision
+        // rather than lint's "AC present — treating as an update record" case.
+        if !args.no_name_check && dfam_name_exists(&family.id, &cache) {
+            eprintln!(
+                "stk repbase-import: ID {:?} already exists in Dfam; \
+                 rename the family, or add an AC to mark this as an update record",
+                family.id.trim()
+            );
+        }
     }
 
     let mut clean_report = CleanReport::default();

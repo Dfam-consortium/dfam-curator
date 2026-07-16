@@ -18,11 +18,56 @@ OPTIONS:
     --record <FILE>      Repbase IG family record (EMBL-style metadata + consensus)
     -o, --output <FILE>  Write output to FILE instead of stdout
     --no-clean           Do not normalize the record on write (see below)
+    --no-taxon-check     Skip validating the organism (OS) against NCBI taxonomy
+    --no-name-check      Skip checking the family name (ID) for Dfam collisions
+    --cache-dir <DIR>    Override the cache directory
+    --no-cache-warn      Suppress notices about missing cache files
+    --force-update-cache Re-download the cache files, ignoring the staleness check
 ```
 
 ```sh
 stk repbase-import --msa Mariner-N5_CyaStr.aln --record Mariner-N5_CyaStr -o Mariner-N5_CyaStr.stk
 ```
+
+## Validation against Dfam and NCBI
+
+Two tier-2 checks run at import, using the same cached databases (and the same
+logic) as `stk lint`, so these problems are caught at import rather than at lint
+time.  Both are **warnings**: the record is still written, and the curator is
+expected to correct it.
+
+### Organism (`;OS` → `#=GF OC`)
+
+Checked against the NCBI taxonomy, as `stk lint`'s `oc_unknown` check does:
+
+```
+stk repbase-import: OS "Cyathus striatis" is not a recognised NCBI scientific taxon
+name; did you mean: "Cyathus striatus" (98%), "Cyathus asiaticus" (93%)
+```
+
+Common names are resolved via the synonym table (`mouse` → *"did you mean "Mus
+musculus" (common name)?"*).  Skip with `--no-taxon-check`.
+
+### Family name (`;ID` → `#=GF ID`)
+
+Checked for collisions against existing Dfam family names (case-insensitively),
+as `stk lint`'s `id_in_dfam` check does:
+
+```
+stk repbase-import: ID "Mariner-N5_DR" already exists in Dfam; rename the family,
+or add an AC to mark this as an update record
+```
+
+Because `repbase-import` never emits an `#=GF AC`, a hit is always a real
+collision — unlike `stk lint`, which treats an ID collision on a record that
+*does* carry an AC as an update rather than an error.  Skip with `--no-name-check`.
+
+### Cache
+
+Each check is skipped when its backing cache file (`taxonomy.tsv`,
+`dfam-names.txt`) is absent, with an `INFO` notice.  As with `stk lint`, a stale
+or missing cache triggers a download (the NCBI taxonomy is ~60 MB) on first use.
+Passing both `--no-taxon-check` and `--no-name-check` avoids all network access.
 
 ## Input formats
 
