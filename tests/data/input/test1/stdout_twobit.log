@@ -7,7 +7,6 @@
 ##       Sequences: 57
 ## Total references assemblies: 3
 ## Reference default: tests/data/input/ref_dir1/GCF999999.1.2bit
-## Remapped assembly name: GCF999999.1
 ##
 ## o Loading reference: tests/data/input/ref_dir1/GCF999999.1.2bit ... 4 sequences loaded in 0.0s
 ## o Validation: 39/57 validated in 0.00s — 18 need mapping
@@ -16,58 +15,58 @@
 Detailed Report:
 Smitten::Identifier: original_id: seq1, assembly_id: None, sequence_id: seq1, start: 0, end: 0, orient: ?, inferred_version: Some(Undefined), validated: valid
 Smitten::Identifier: original_id: seq1, assembly_id: None, sequence_id: seq1, start: 0, end: 0, orient: ?, inferred_version: Some(Undefined), validated: invalid
-Smitten::Identifier: original_id: seq2_7_10, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V0), validated: valid
-Smitten::Identifier: original_id: seq2_7_10_R, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V0), validated: valid
-Smitten::Identifier: original_id: seq2_6_10, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V0), validated: fixed_halfopen
-Smitten::Identifier: original_id: Seq3_43_56, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: valid
-Smitten::Identifier: original_id: Seq3_42_55, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus1
-Smitten::Identifier: original_id: Seq3_41_54, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus2
-Smitten::Identifier: original_id: Seq3_40_53, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus3
-Smitten::Identifier: original_id: Seq3_44_57, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus1
-Smitten::Identifier: original_id: Seq3_45_58, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus2
-Smitten::Identifier: original_id: Seq3_46_59, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus3
+Smitten::Identifier: original_id: seq2_7_10, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V0), validated: valid
+Smitten::Identifier: original_id: seq2_7_10_R, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V0), validated: valid
+Smitten::Identifier: original_id: seq2_6_10, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V0), validated: fixed_halfopen
+Smitten::Identifier: original_id: Seq3_43_56, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: valid
+Smitten::Identifier: original_id: Seq3_42_55, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus1
+Smitten::Identifier: original_id: Seq3_41_54, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus2
+Smitten::Identifier: original_id: Seq3_40_53, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_plus3
+Smitten::Identifier: original_id: Seq3_44_57, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus1
+Smitten::Identifier: original_id: Seq3_45_58, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus2
+Smitten::Identifier: original_id: Seq3_46_59, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V0), validated: fixed_minus3
 Smitten::Identifier: original_id: seq1_1_20_R, assembly_id: GCF999999.1, sequence_id: seq1, start: 63, end: 82, orient: +, inferred_version: Some(V0), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1_1_4, assembly_id: GCF999999.1, sequence_id: seq1, start: 11, end: 16, orient: +, inferred_version: Some(V0), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1_27_29, assembly_id: GCF999999.1, sequence_id: seq1, start: 21, end: 23, orient: +, inferred_version: Some(V0), validated: fixed_remapped_ambig
 Smitten::Identifier: original_id: seq1_120_131_R, assembly_id: GCF999999.1, sequence_id: Seq3, start: 16, end: 27, orient: +, inferred_version: Some(V0), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1_120_131, assembly_id: GCF999999.1, sequence_id: Seq3, start: 69, end: 80, orient: -, inferred_version: Some(V0), validated: fixed_remapped_unique
-Smitten::Identifier: original_id: Seq3_6_45_R_26_40_12_15_R, assembly_id: None, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V0), validated: valid
-Smitten::Identifier: original_id: seq2_19_26_R, assembly_id: None, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V0), validated: fixed_orient
+Smitten::Identifier: original_id: Seq3_6_45_R_26_40_12_15_R, assembly_id: GCF999999.1, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V0), validated: valid
+Smitten::Identifier: original_id: seq2_19_26_R, assembly_id: GCF999999.1, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V0), validated: fixed_orient
 Smitten::Identifier: original_id: seq1:1, assembly_id: GCF999999.1, sequence_id: seq1, start: 1, end: 100, orient: +, inferred_version: Some(Undefined), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:1, assembly_id: seq1, sequence_id: 1, start: 0, end: 0, orient: ?, inferred_version: Some(Undefined), validated: invalid
-Smitten::Identifier: original_id: seq2:7-10, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V1), validated: valid
-Smitten::Identifier: original_id: seq2:10-7, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V1), validated: valid
-Smitten::Identifier: original_id: seq2:6-10, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V1), validated: fixed_halfopen
-Smitten::Identifier: original_id: Seq3:43-56, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: valid
-Smitten::Identifier: original_id: Seq3:42-55, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus1
-Smitten::Identifier: original_id: Seq3:41-54, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus2
-Smitten::Identifier: original_id: Seq3:40-53, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus3
-Smitten::Identifier: original_id: Seq3:44-57, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus1
-Smitten::Identifier: original_id: Seq3:45-58, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus2
-Smitten::Identifier: original_id: Seq3:46-59, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus3
+Smitten::Identifier: original_id: seq2:7-10, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V1), validated: valid
+Smitten::Identifier: original_id: seq2:10-7, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V1), validated: valid
+Smitten::Identifier: original_id: seq2:6-10, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V1), validated: fixed_halfopen
+Smitten::Identifier: original_id: Seq3:43-56, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: valid
+Smitten::Identifier: original_id: Seq3:42-55, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus1
+Smitten::Identifier: original_id: Seq3:41-54, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus2
+Smitten::Identifier: original_id: Seq3:40-53, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_plus3
+Smitten::Identifier: original_id: Seq3:44-57, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus1
+Smitten::Identifier: original_id: Seq3:45-58, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus2
+Smitten::Identifier: original_id: Seq3:46-59, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V1), validated: fixed_minus3
 Smitten::Identifier: original_id: seq1:20-1, assembly_id: GCF999999.1, sequence_id: seq1, start: 63, end: 82, orient: +, inferred_version: Some(V1), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:1-4, assembly_id: GCF999999.1, sequence_id: seq1, start: 11, end: 16, orient: +, inferred_version: Some(V1), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:27-29, assembly_id: GCF999999.1, sequence_id: seq1, start: 20, end: 22, orient: +, inferred_version: Some(V1), validated: fixed_remapped_ambig
 Smitten::Identifier: original_id: seq1:131-120, assembly_id: GCF999999.1, sequence_id: Seq3, start: 16, end: 27, orient: +, inferred_version: Some(V1), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:131-120, assembly_id: GCF999999.1, sequence_id: Seq3, start: 69, end: 80, orient: -, inferred_version: Some(V1), validated: fixed_remapped_unique
-Smitten::Identifier: original_id: Seq3:45-6:26-40:15-12, assembly_id: None, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V1), validated: valid
-Smitten::Identifier: original_id: seq2:26-19, assembly_id: None, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V1), validated: fixed_orient
-Smitten::Identifier: original_id: seq2:7-10_+, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V2), validated: valid
-Smitten::Identifier: original_id: seq2:7-10_-, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V2), validated: valid
-Smitten::Identifier: original_id: seq2:6-10_+, assembly_id: None, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V2), validated: fixed_halfopen
-Smitten::Identifier: original_id: Seq3:43-56_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: valid
-Smitten::Identifier: original_id: Seq3:42-55_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus1
-Smitten::Identifier: original_id: Seq3:41-54_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus2
-Smitten::Identifier: original_id: Seq3:40-53_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus3
-Smitten::Identifier: original_id: Seq3:44-57_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus1
-Smitten::Identifier: original_id: Seq3:45-58_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus2
-Smitten::Identifier: original_id: Seq3:46-59_+, assembly_id: None, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus3
+Smitten::Identifier: original_id: Seq3:45-6:26-40:15-12, assembly_id: GCF999999.1, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V1), validated: valid
+Smitten::Identifier: original_id: seq2:26-19, assembly_id: GCF999999.1, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V1), validated: fixed_orient
+Smitten::Identifier: original_id: seq2:7-10_+, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V2), validated: valid
+Smitten::Identifier: original_id: seq2:7-10_-, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: -, inferred_version: Some(V2), validated: valid
+Smitten::Identifier: original_id: seq2:6-10_+, assembly_id: GCF999999.1, sequence_id: seq2, start: 7, end: 10, orient: +, inferred_version: Some(V2), validated: fixed_halfopen
+Smitten::Identifier: original_id: Seq3:43-56_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: valid
+Smitten::Identifier: original_id: Seq3:42-55_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus1
+Smitten::Identifier: original_id: Seq3:41-54_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus2
+Smitten::Identifier: original_id: Seq3:40-53_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_plus3
+Smitten::Identifier: original_id: Seq3:44-57_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus1
+Smitten::Identifier: original_id: Seq3:45-58_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus2
+Smitten::Identifier: original_id: Seq3:46-59_+, assembly_id: GCF999999.1, sequence_id: Seq3, start: 43, end: 56, orient: +, inferred_version: Some(V2), validated: fixed_minus3
 Smitten::Identifier: original_id: seq1:1-20_-, assembly_id: GCF999999.1, sequence_id: seq1, start: 63, end: 82, orient: +, inferred_version: Some(V2), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:1-4_+, assembly_id: GCF999999.1, sequence_id: seq1, start: 11, end: 16, orient: +, inferred_version: Some(V2), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:27-29_+, assembly_id: GCF999999.1, sequence_id: seq1, start: 38, end: 40, orient: +, inferred_version: Some(V2), validated: fixed_remapped_ambig
 Smitten::Identifier: original_id: seq1:120-131_-, assembly_id: GCF999999.1, sequence_id: Seq3, start: 16, end: 27, orient: +, inferred_version: Some(V2), validated: fixed_remapped_unique
 Smitten::Identifier: original_id: seq1:120-131_-, assembly_id: GCF999999.1, sequence_id: Seq3, start: 69, end: 80, orient: -, inferred_version: Some(V2), validated: fixed_remapped_unique
-Smitten::Identifier: original_id: Seq3:6-45_-:26-40_+:12-15_-, assembly_id: None, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V2), validated: valid
-Smitten::Identifier: original_id: seq2:19-26_-, assembly_id: None, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V2), validated: fixed_orient
+Smitten::Identifier: original_id: Seq3:6-45_-:26-40_+:12-15_-, assembly_id: GCF999999.1, sequence_id: Seq3, start: 6, end: 9, orient: +, inferred_version: Some(V2), validated: valid
+Smitten::Identifier: original_id: seq2:19-26_-, assembly_id: GCF999999.1, sequence_id: seq2, start: 19, end: 26, orient: +, inferred_version: Some(V2), validated: fixed_orient
 Smitten::Identifier: original_id: myasm:mychr:4-43_+, assembly_id: myasm, sequence_id: mychr, start: 4, end: 43, orient: +, inferred_version: Some(V2), validated: valid
 Smitten::Identifier: original_id: myasm:mychr:4-43_-, assembly_id: myasm, sequence_id: mychr, start: 4, end: 43, orient: -, inferred_version: Some(V2), validated: valid

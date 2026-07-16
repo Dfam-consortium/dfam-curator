@@ -5,13 +5,17 @@ prior to submission to [Dfam](https://dfam.org) database. Provides command-line 
 viewing, validating, editing, and repairing Stockholm-format alignment files,
 along with a library of shared alignment and consensus-calling routines.
 
+> 📖 **New to Dfam seed alignments?** Start with **[Dfam_Seeds.md](Dfam_Seeds.md)** —
+> a complete guide to the seed alignment format, the required and optional metadata
+> fields, sequence identifier conventions, and annotated examples.
+
 ---
  
 
 ## Tools
 
 - **[linup](#linup)** — MSA viewer and format converter
-- **[stk](#stk)** — Stockholm file metadata tool (lint · edit · extract)
+- **[stk](#stk)** — Stockholm file metadata tool (lint · edit · extract · convert)
 - **[discoord](#discoord)** — Sequence coordinate validator and repairer
 - **[update-cache](#update-cache)** — Populate the stk-lint validation cache
 
@@ -72,8 +76,9 @@ use '-h' with any of these subcommands.
 ## linup
 
 MSA viewer and format converter. Reads a multiple sequence alignment in
-Stockholm, FASTA/A2M, or crossmatch `.align` format (or rmblastn tabular
-output with `--blast-tab`) and writes it in a requested format with optional
+Stockholm, FASTA/A2M, crossmatch `.align`, or Repbase IG-format MSA
+(aligned FASTA with `; FRAGMENT` comments) — or rmblastn tabular
+output with `--blast-tab` — and writes it in a requested format with optional
 trimming, slicing, or reverse-complementing. A Rust port of
 `RepeatModeler/util/Linup`.
 
@@ -116,12 +121,18 @@ are mutually exclusive. `--min-len` is only valid with `--sub-align`.
 ## stk
 
 Dfam Stockholm file toolkit. Operates on one or more `.stk` files and provides
-three subcommands.
+subcommands for validation, extraction, and editing.
 
 ```
 USAGE:
     stk <SUBCOMMAND>
 ```
+
+Commands that write Stockholm output (`edit`, `extract`, `convert`) normalize it
+to Dfam conventions by default — gap characters `-`, `_`, `~` are rewritten to `.`,
+and 7-digit accessions are widened to the 9-digit standard. A short summary of
+what was changed is printed to stderr. Pass `--no-clean` to any writing command to
+emit the record verbatim instead.
 
 ### stk lint
 
@@ -146,9 +157,17 @@ OPTIONS:
 Exit status: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
 
 Checks include: Stockholm structure, required annotation fields, record terminator,
-duplicate IDs (with AC-aware severity), RF/consensus agreement, taxonomy names,
-Dfam classification strings, live PubMed/DOI resolution (disable with `--no-network`),
-and (with `--genome`) sequence coordinate validity.
+duplicate IDs (with AC-aware severity), RF/consensus agreement, non-standard gap
+characters, author (`AU`) formatting, taxonomy names, Dfam classification strings,
+live PubMed/DOI resolution (disable with `--no-network`), and (with `--genome`)
+sequence coordinate validity.
+
+Informational notices additionally flag: sequence identifiers written in a legacy
+(non-V2) Smitten format (parseable, but worth converting to the standard form);
+family names that look like RepeatModeler automated names (`rnd-#_family-#` /
+`ltr-#_family-#`), which are unlikely to be unique in Dfam; records carrying an `AC`
+(treated as updates to an already-released family); and authors without an ORCID.
+
 Validation is split into tier-1 (always available) and tier-2 (requires a populated
 cache; see [update-cache](#update-cache)).
 
@@ -168,6 +187,7 @@ OPTIONS:
                            Numeric value → 1-based record number
                            Non-numeric   → exact #=GF ID match
     -o, --output <FILE>  Write output to FILE instead of stdout
+    --no-clean           Emit the record verbatim (skip clean-on-write normalization)
 ```
 
 ```sh
@@ -204,6 +224,7 @@ OPTIONS:
                                Numeric value → 1-based record number
                                Non-numeric   → exact #=GF ID match
     -o, --output <FILE>      Write output to FILE instead of stdout
+    --no-clean               Emit records verbatim (skip clean-on-write normalization)
 ```
 
 Operations are applied in a fixed sequence: `--delete`, then `--set`, then `--append`, then `--sub`.
@@ -217,6 +238,37 @@ stk edit --sub ID "/^(.*)-$/$1/" families.stk
 stk edit --sub DE "/foo/bar/g" families.stk
 stk edit --update-consensus families.stk
 stk edit --select MyFam --update-consensus families.stk
+```
+
+### stk convert
+
+Convert an alignment file between formats. The input format is auto-detected
+(Stockholm, FASTA/A2M, Clustal, crossmatch `.align`, or Repbase IG-format MSA).
+
+```
+USAGE:
+    stk convert [OPTIONS] <INPUT>
+
+ARGUMENTS:
+    <INPUT>    Input alignment file
+
+OPTIONS:
+    --to <FORMAT>        Output format [default: stk]
+                           stk        Stockholm 1.0
+                           msa        Aligned FASTA / A2M (gaps preserved)
+                           aln        Clustal ALN interleaved
+                           raw-seqs   Ungapped FASTA, one entry per instance
+                           consensus  Recalculated consensus per record (FASTA)
+                           reference  Stored #=GC RF line per record (FASTA; STK input only)
+    --select <SELECT>    Process only the matching record (Stockholm input only)
+    -o, --out <FILE>     Write output to FILE instead of stdout
+    --no-clean           Emit Stockholm output verbatim (skip clean-on-write normalization)
+```
+
+```sh
+stk convert --to stk Mariner-N5_CyaStr.aln     # Repbase IG MSA → Stockholm
+stk convert --to msa families.stk
+stk convert --to consensus families.stk
 ```
 
 ---
@@ -281,6 +333,16 @@ position.
 
 Aho-Corasick (default) searches both strands in a single genome pass;
 Boyer-Moore (`--boyer-moore`) searches each strand separately.
+
+### Output identifiers (`-o`)
+
+When writing corrected files, every record that resolves to coordinates —
+whether it validated directly or was remapped — is emitted with a full
+Smitten V2 identifier, `assembly_id:sequence_id:start-end_orient`. The
+`assembly_id` is taken from the record's own identifier when present, otherwise
+from the reference the record resolved against (derived from the reference
+filename). Records that carry an assembly already keep it; records that never
+resolve to coordinates are written without an added assembly prefix.
 
 ### Delimited input format
 

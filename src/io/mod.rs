@@ -1,6 +1,8 @@
 pub mod clustal;
 pub mod crossmatch;
 pub mod fasta;
+pub mod ig_family;
+pub mod ig_msa;
 pub mod linup_fmt;
 pub mod stockholm;
 pub mod twobit;
@@ -19,6 +21,11 @@ pub enum Format {
     Clustal,
     /// Crossmatch / RepeatMasker `.align` pairwise format.
     Crossmatch,
+    /// Repbase IG-derived aligned-FASTA (MSA) format.
+    IgMsa,
+    /// Repbase IG-derived family record (metadata + consensus).  Not an alignment;
+    /// consumed by `stk repbase-import`, not `read_alignment`.
+    IgFamily,
 }
 
 /// Auto-detect the format by scanning the first non-blank meaningful line of the file.
@@ -45,6 +52,20 @@ pub fn detect_format(path: &Path) -> io::Result<Format> {
         if trimmed.starts_with('>') {
             return Ok(Format::Fasta);
         }
+        if let Some(body) = trimmed.strip_prefix(';') {
+            // IG-derived formats.  An EMBL-style two-letter tag immediately after
+            // the ';' (";ID", ";DE", ";SQ", …) marks a Repbase family record;
+            // anything else (e.g. "; FRAGMENT …") is an IG MSA.
+            let tok = body
+                .trim_start()
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .unwrap_or("");
+            if tok.len() == 2 && tok.chars().all(|c| c.is_ascii_uppercase()) {
+                return Ok(Format::IgFamily);
+            }
+            return Ok(Format::IgMsa);
+        }
         // Crossmatch score lines start with an integer score.
         if trimmed.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
             return Ok(Format::Crossmatch);
@@ -65,6 +86,12 @@ pub fn read_alignment(path: &Path) -> io::Result<MultiAlign> {
         Format::Fasta     => fasta::read(path),
         Format::Clustal   => clustal::read(path),
         Format::Crossmatch => read_crossmatch_as_multialign(path),
+        Format::IgMsa     => ig_msa::read(path),
+        Format::IgFamily  => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "IG/Repbase family record is a metadata file, not an alignment; \
+             use `stk repbase-import` to convert it to Stockholm",
+        )),
     }
 }
 

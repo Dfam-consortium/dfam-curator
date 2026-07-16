@@ -1,5 +1,8 @@
 /// Tier-1, tier-2, and network lint checks for Dfam Stockholm records.
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+
+use regex::Regex;
 
 use crate::consensus::{build_consensus_from_sequences, ConsensusParams};
 use crate::dfam::cache::Cache;
@@ -260,6 +263,35 @@ pub fn check_orcid_summary(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
              '#=GF AU    ORCID:0000-0001-2345-6789 Barbara McClintock'.",
             incomplete, with_au,
         ),
+    )]
+}
+
+/// Cross-record check: emit a single INFO if any record uses a RepeatModeler
+/// automated name (per-record `id_automated_name` WARNs flag them individually).
+///
+/// The advice is deliberately general: Dfam family names are optional, so the
+/// remedy is to drop them or replace them with something unique and attributable,
+/// and to keep metadata (classification, taxonomy) out of the name since that
+/// changes over time while a name should stay invariant.
+///
+/// Returns file-level diagnostics (the caller prints them with label `FILE`).
+pub fn check_automated_name_summary(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    let any = records
+        .iter()
+        .any(|r| r.gf_first("ID").is_some_and(is_repeatmodeler_name));
+
+    if !any {
+        return Vec::new();
+    }
+
+    vec![info(
+        "automated_name",
+        "one or more records use a RepeatModeler automated name \
+         (rnd-#_family-# / ltr-#_family-#).  Dfam family names are optional: either \
+         remove them, or replace them with names that are likely to be unique and \
+         attributable to your work.  Avoid embedding metadata such as classification \
+         or taxonomy in the name — those change over time, whereas a name (if given) \
+         should be as invariant as possible.",
     )]
 }
 
@@ -562,6 +594,17 @@ fn check_ac(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
+/// `true` if `id` looks like a RepeatModeler automated family name, e.g.
+/// `rnd-1_family-4` or `ltr-2_family-13`.
+///
+/// The match is case-insensitive and anchored at the start, so trailing text
+/// (such as an appended `#Class/Subclass` classification) does not prevent it.
+fn is_repeatmodeler_name(id: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)^(?:rnd|ltr)-\d+_family-\d+").unwrap());
+    re.is_match(id.trim())
+}
+
 fn check_id(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     let ids = r.gf_all("ID");
     if ids.len() > 1 {
@@ -583,6 +626,20 @@ fn check_id(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                     "ID {:?} is a purely numeric string; \
                      `stk edit --select` interprets numeric values as record numbers, \
                      making this ID unreachable by name",
+                    id
+                ),
+            ));
+        }
+
+        // Independent of the checks above: flag RepeatModeler's automated names,
+        // which are near-guaranteed to collide with other submissions in Dfam.
+        if is_repeatmodeler_name(id) {
+            d.push(warn(
+                "id_automated_name",
+                format!(
+                    "ID {:?} looks like a RepeatModeler automated name \
+                     (rnd-#_family-# / ltr-#_family-#), which is unlikely to be \
+                     unique within Dfam",
                     id
                 ),
             ));
@@ -972,18 +1029,25 @@ fn check_mm(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     }
 }
 
-fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+/// Whether `#=GC RF` reproduces the consensus called from the record's sequence
+/// rows — the basis of the `rf_consensus_mismatch` lint.
+///
+/// Returns `None` when the check does not apply (RF absent/empty, no sequence
+/// rows, or a hand-curated RF); otherwise `Some(true)` when RF matches the called
+/// consensus and `Some(false)` when it diverges.  Exposed so other tools (e.g.
+/// `stk repbase-import`) can run the identical check and stay in agreement.
+pub fn rf_consensus_status(r: &RawDfamRecord) -> Option<bool> {
     // A hand-curated consensus is not expected to reproduce the called one.
     if rf_is_handcurated(r) {
-        return;
+        return None;
     }
 
     let rf = match r.gc.get("RF") {
         Some(rf) if !rf.is_empty() => rf,
-        _ => return,
+        _ => return None,
     };
     if r.sequences.is_empty() {
-        return;
+        return None;
     }
 
     // STK files may use any Stockholm gap character; the consensus builder uses '-'.
@@ -1000,11 +1064,14 @@ fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
         .collect();
 
     // Case-insensitive comparison so lowercase RF letters are handled.
-    let mismatch = called_rf.len() != rf.len()
-        || called_rf.iter().zip(rf.bytes())
-            .any(|(&c, r)| c.to_ascii_uppercase() != r.to_ascii_uppercase());
+    let matches = called_rf.len() == rf.len()
+        && called_rf.iter().zip(rf.bytes())
+            .all(|(&c, r)| c.to_ascii_uppercase() == r.to_ascii_uppercase());
+    Some(matches)
+}
 
-    if mismatch {
+fn check_rf_consensus(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    if rf_consensus_status(r) == Some(false) {
         d.push(warn(
             "rf_consensus_mismatch",
             "the #=GC RF line does not match the consensus called from the alignment sequences",
@@ -1372,6 +1439,64 @@ mod tests {
         );
         let diags = lint_record(&r, None);
         assert!(!has_check(&diags, "id_numeric"));
+    }
+
+    #[test]
+    fn id_repeatmodeler_rnd_name_warns() {
+        let r = make_record(
+            &[("ID","rnd-1_family-4"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""),
+            &[],
+        );
+        let diags = lint_record(&r, None);
+        let w = diags.iter().find(|d| d.check == "id_automated_name").expect("expected warn");
+        assert_eq!(w.severity, Severity::Warn);
+    }
+
+    #[test]
+    fn id_repeatmodeler_ltr_name_warns_case_insensitive() {
+        // Uppercase and a trailing classification suffix must still match.
+        let r = make_record(
+            &[("ID","LTR-12_family-3#LTR/ERVL"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""),
+            &[],
+        );
+        assert!(has_check(&lint_record(&r, None), "id_automated_name"));
+    }
+
+    #[test]
+    fn id_normal_name_not_flagged_as_automated() {
+        let r = make_record(
+            &[("ID","L1HS"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""),
+            &[],
+        );
+        assert!(!has_check(&lint_record(&r, None), "id_automated_name"));
+    }
+
+    #[test]
+    fn automated_name_summary_fires_when_any_record_matches() {
+        let auto = make_record(
+            &[("ID","rnd-5_family-2"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let named = make_record(
+            &[("ID","L1HS"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        let diags = check_automated_name_summary(&[auto, named]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].check, "automated_name");
+        assert_eq!(diags[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn automated_name_summary_silent_without_matches() {
+        let r = make_record(
+            &[("ID","L1HS"),("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","0")],
+            Some(""), &[],
+        );
+        assert!(check_automated_name_summary(&[r]).is_empty());
     }
 
     #[test]

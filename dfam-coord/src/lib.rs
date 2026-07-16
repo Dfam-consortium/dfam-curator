@@ -158,7 +158,7 @@ pub fn process_sequences(
     map_sequences: bool,
     use_aho_corasick: bool,
     debug_mode: bool,
-    remapped_assembly: Option<&str>,
+    assembly_name: Option<&str>,
     remove_duplicates: bool,
 ) -> Vec<SequenceRecord> {
     let mut results = sequences;
@@ -177,9 +177,31 @@ pub fn process_sequences(
 
     if map_sequences {
         if use_aho_corasick {
-            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly, remove_duplicates);
+            aho_corasick_search_with_validation(&mut results, genome_map, debug_mode, assembly_name, remove_duplicates);
         } else {
-            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode, remapped_assembly, remove_duplicates);
+            boyer_moore_search_with_validation(&mut results, genome_map, debug_mode, assembly_name, remove_duplicates);
+        }
+    }
+
+    // Stamp the reference's assembly onto every record that resolved to
+    // coordinates (validated, coordinate-fixed, or remapped) but carries no
+    // assembly_id of its own, so output identifiers are emitted in full V2 form
+    // (assembly_id:sequence_id:start-end_orient) wherever coordinates are known.
+    //
+    // Gated on `validated.is_some()`: a record that failed validation still holds
+    // its originally-parsed (and now known-wrong) coordinates, so it must NOT be
+    // dressed up as a full, resolved V2 identifier — it stays bare.  Records that
+    // already name an assembly are left untouched.
+    if let Some(name) = assembly_name {
+        for record in results.iter_mut() {
+            if record.assembly_id.is_none()
+                && record.validated.is_some()
+                && record.start.is_some()
+                && record.end.is_some()
+                && record.orient.is_some()
+            {
+                record.assembly_id = Some(name.to_string());
+            }
         }
     }
 

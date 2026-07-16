@@ -143,22 +143,20 @@ fn main() {
         println!("## Reference default: {}", ref_def);
     }
 
-    // When using -r with -m, derive the assembly name from the reference filename
-    // so successfully remapped records get their assembly_id updated.
-    let remapped_assembly: Option<String> = if args.map_sequences {
-        args.reference_default.as_ref().map(|path| derive_assembly_name(path))
-    } else {
-        None
-    };
-    if let Some(ref name) = remapped_assembly {
-        println!("## Remapped assembly name: {}", name);
-    }
+    // Records that resolve against a reference (validated, coordinate-fixed, or
+    // remapped) and carry no assembly_id of their own are stamped with that
+    // reference's assembly, derived from its filename — the inverse of the
+    // `<assembly>.2bit` / `<assembly>.fa` lookup convention.  This makes `-o`
+    // output full V2 (assembly_id:sequence_id:start-end_orient) wherever
+    // coordinates are known, not only for remapped records.  The per-reference
+    // name is derived below, where each reference file is loaded.
     println!("##");
 
     if let Some(ref_dir) = &args.reference_dir {
         // Per-assembly lookup: each group gets its own reference file.
         for (assembly_id, sequences) in sequences_by_assembly {
             let ref_file = find_reference_file(ref_dir, &assembly_id, &args.reference_default);
+            let assembly_name = derive_assembly_name(&ref_file);
             print!("## o Loading reference: {} ... ", ref_file);
             let t = Instant::now();
             let genome_map = load_reference(&ref_file).unwrap_or_else(|e| {
@@ -166,7 +164,7 @@ fn main() {
                 std::process::exit(1);
             });
             println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
-            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);
+            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates);
             for record in results.iter_mut() {
                 if record.validated.is_none() {
                     record.validated = Some("invalid".to_string());
@@ -179,6 +177,7 @@ fn main() {
         // Single reference: flatten all groups into one batch so there is only
         // one validation+mapping pass (and one progress bar) regardless of how
         // many distinct assembly_id prefixes appear in the input identifiers.
+        let assembly_name = derive_assembly_name(ref_default);
         print!("## o Loading reference: {} ... ", ref_default);
         let t = Instant::now();
         let genome_map = load_reference(ref_default).unwrap_or_else(|e| {
@@ -187,7 +186,7 @@ fn main() {
         });
         println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
         let all_sequences: Vec<SequenceRecord> = sequences_by_assembly.into_values().flatten().collect();
-        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, remapped_assembly.as_deref(), args.remove_duplicates);
+        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates);
         for record in results.iter_mut() {
             if record.validated.is_none() {
                 record.validated = Some("invalid".to_string());

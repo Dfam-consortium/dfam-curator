@@ -20,14 +20,15 @@ use dfam_curator::{
         cache::{cache_dir, load_cache, missing_cache_files, refresh_cache, RefreshMode},
         clean::{clean_record, CleanReport},
         edit::{apply_ops, Op},
-        lint::{check_ac_summary, check_citations_network, check_duplicate_ids,
-               check_orcid_summary, check_seqid_format_summary,
+        lint::{check_ac_summary, check_automated_name_summary, check_citations_network,
+               check_duplicate_ids, check_orcid_summary, check_seqid_format_summary,
                check_unused_citation_fields, lint_record, rf_is_handcurated,
                Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
+        repbase::{to_stk_record, RepbaseImport},
     },
     io::{
-        clustal, detect_format, fasta, read_alignment, stockholm,
+        clustal, detect_format, fasta, ig_family, ig_msa, read_alignment, stockholm,
         Format,
     },
 };
@@ -57,6 +58,8 @@ enum Cmd {
     Extract(ExtractArgs),
     /// Convert alignment files between formats.
     Convert(ConvertArgs),
+    /// Import a Repbase IG MSA + family record into a Dfam Stockholm record.
+    RepbaseImport(RepbaseImportArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -66,6 +69,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Edit(args)    => run_edit(args),
         Cmd::Extract(args) => run_extract(args),
         Cmd::Convert(args) => run_convert(args),
+        Cmd::RepbaseImport(args) => run_repbase_import(args),
     }
 }
 
@@ -205,6 +209,7 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
             .chain(check_ac_summary(&records))
             .chain(check_orcid_summary(&records))
             .chain(check_seqid_format_summary(&records))
+            .chain(check_automated_name_summary(&records))
         {
             if d.severity >= min_sev {
                 if d.severity == Severity::Error {
@@ -695,6 +700,8 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
         Format::Clustal   => *to == OutFormat::Aln,
         Format::Fasta     => *to == OutFormat::Msa,
         Format::Crossmatch => false,
+        // IG MSA has no self-conversion target; IG family isn't an alignment.
+        Format::IgMsa | Format::IgFamily => false,
     };
     if args.to.is_none() && same_fmt {
         let name = match fmt {
@@ -702,6 +709,7 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
             Format::Clustal    => "Clustal ALN",
             Format::Fasta      => "FASTA/A2M",
             Format::Crossmatch => unreachable!(),
+            Format::IgMsa | Format::IgFamily => unreachable!(),
         };
         anyhow::bail!(
             "input is already {name}; use --to {flag} for an explicit round-trip, \
@@ -712,6 +720,7 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
                 Format::Clustal    => "aln",
                 Format::Fasta      => "msa",
                 Format::Crossmatch => unreachable!(),
+                Format::IgMsa | Format::IgFamily => unreachable!(),
             }
         );
     }
@@ -904,4 +913,70 @@ fn family_fasta_id(record: &RawDfamRecord, stem: &str) -> String {
         }
     }
     format!("{}:{}", stem, record.record_num)
+}
+
+// ── repbase-import subcommand ─────────────────────────────────────────────────
+
+#[derive(Args, Debug)]
+#[command(
+    about = "Import a Repbase IG MSA + family record into a Dfam Stockholm record",
+    after_help = "Combines a Repbase IG-format alignment (--msa) and family record \
+                  (--record) into one Stockholm record: the family record supplies \
+                  #=GF metadata, the MSA supplies #=GC RF (consensus) and the aligned \
+                  sequence rows.\n\n\
+                  Classification (#=GF TP) is mapped from the Repbase keywords via a \
+                  built-in lookup table; keyword combinations not yet in the table leave \
+                  TP unset with a warning.  Consensus discrepancies (between the two \
+                  input files, or against the called consensus) are reported as \
+                  warnings.  See docs/repbase-import.md.\n\n\
+                  EXAMPLE\n  \
+                  stk repbase-import --msa fam.ig --record fam_record.ig -o fam.stk"
+)]
+struct RepbaseImportArgs {
+    /// Repbase IG MSA file (aligned FASTA with `; FRAGMENT` comments).
+    #[arg(long, value_name = "FILE")]
+    msa: PathBuf,
+
+    /// Repbase IG family record file (EMBL-style metadata + consensus).
+    #[arg(long, value_name = "FILE")]
+    record: PathBuf,
+
+    /// Write output to FILE instead of stdout.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    output: Option<PathBuf>,
+
+    /// Do not clean the record on write.
+    /// By default it is normalized to Dfam conventions
+    /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
+    #[arg(long)]
+    no_clean: bool,
+}
+
+fn run_repbase_import(args: RepbaseImportArgs) -> anyhow::Result<()> {
+    let family = ig_family::read(&args.record)
+        .with_context(|| format!("failed to read IG family record {}", args.record.display()))?;
+    let msa = ig_msa::read(&args.msa)
+        .with_context(|| format!("failed to read IG MSA {}", args.msa.display()))?;
+
+    let RepbaseImport { mut record, warnings } = to_stk_record(&family, &msa);
+    for w in &warnings {
+        eprintln!("stk repbase-import: {}", w);
+    }
+
+    let mut clean_report = CleanReport::default();
+    if !args.no_clean {
+        clean_report.merge(clean_record(&mut record));
+    }
+
+    let mut out: Box<dyn Write> = match &args.output {
+        None => Box::new(BufWriter::new(std::io::stdout())),
+        Some(p) => Box::new(BufWriter::new(
+            std::fs::File::create(p)
+                .with_context(|| format!("cannot create {}", p.display()))?,
+        )),
+    };
+    record.write_to(&mut out)?;
+    out.flush()?;
+    report_clean("stk repbase-import", &clean_report);
+    Ok(())
 }

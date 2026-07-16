@@ -38,11 +38,16 @@ pub fn write(
         max_id_len = max_id_len.max(inst.name.len());
     }
 
+    // The reference start coordinate.  `seq_start` is 1-based, so a value of 0
+    // means "unset" (a consensus-style reference with no source coordinate); such
+    // a reference is numbered from 1, matching the consensus row.
+    let ref_start = ref_row.seq_start.max(1);
+
     // Widest coordinate across reference, consensus, and all instance start/end.
     let ref_ungapped = count_alpha(&ref_row.seq) as u64;
-    let ref_last = ref_row.seq_start.saturating_add(ref_ungapped).saturating_sub(1);
+    let ref_last = ref_start.saturating_add(ref_ungapped).saturating_sub(1);
     let cons_ungapped = count_alpha(consensus) as u64;
-    let mut max_coord: u64 = ref_row.seq_start.max(ref_last).max(cons_ungapped);
+    let mut max_coord: u64 = ref_start.max(ref_last).max(cons_ungapped);
     for inst in &msa.sequences[1..] {
         max_coord = max_coord.max(inst.seq_start).max(inst.seq_end);
     }
@@ -97,7 +102,7 @@ pub fn write(
 
     // ── Emit blocks ───────────────────────────────────────────────────────────
 
-    let mut ref_pos: u64 = ref_row.seq_start;
+    let mut ref_pos: u64 = ref_start;
     let mut cons_pos: u64 = 1;
     let mut line_start = 0usize;
 
