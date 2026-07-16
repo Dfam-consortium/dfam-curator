@@ -49,7 +49,7 @@ the structured prefixes above — plain `# comment` lines are not valid inside a
 Each aligned sequence is written as a name, whitespace, and the aligned sequence string:
 
 ```
-GCA_000001405.15:chr1:100-200:+    ACGT..ACGT
+GCA_000001405.15:chr1:100-200_+    ACGT..ACGT
 ```
 
 - All sequence rows in a record must have the same aligned length.
@@ -66,8 +66,8 @@ one per sequence row, naming the character it found.
 Whitespace is never a gap.
 
 ```
-GCA_000001405.15:chr1:100-200:+    ACGT..ACGT      # Dfam convention
-GCA_000001405.15:chr1:100-200:+    ACGT--ACGT      # read, but warned
+GCA_000001405.15:chr1:100-200_+    ACGT..ACGT      # Dfam convention
+GCA_000001405.15:chr1:100-200_+    ACGT--ACGT      # read, but warned
 ```
 
 #### One line per sequence — block format is not accepted
