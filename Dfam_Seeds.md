@@ -580,11 +580,9 @@ Use the `stk lint` command to check a seed file before submission:
 # Tier-1 checks only (format and field validation):
 stk lint my_families.stk
 
-# Tier-2 checks (validates TP against known classifications,
-#               OC against NCBI taxonomy, ID against existing Dfam names):
-stk lint --classification dfam_classification.txt \
-         --taxonomy ncbi_taxonomy.txt \
-         --names dfam_names.txt \
+# Additionally validate that the sequence coordinates and sequences
+# map to the assembly
+stk lint --genome GCA000382302.fna \
          my_families.stk
 ```
 
