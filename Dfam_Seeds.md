@@ -383,7 +383,7 @@ match the number of sequence rows that follow.
 
 ### `TD` — Target site duplication
 
-The target site duplication (TSD) consensus sequence, written using IUB ambiguity codes.
+The target site duplication (TSD) consensus sequence, written using IUB ambiguity codes. [optional]
 
 ```
 #=GF TD    TTAAAA
@@ -400,10 +400,9 @@ of Ns.  For example a family with 5bp TSDs would be encoded as:
 ### `CT` — Consensus type
 
 Describes how the `#=GC RF` consensus was produced.  The field is optional; when it is
-absent the consensus is assumed to have been called from the alignment by the Dfam
-consensus caller.
+absent the Dfam default consensus caller is used. [optional]
 
-The value must be one of a reserved set of words.  At present the only reserved word is:
+The current supported alternatives are:
 
 | Word        | Meaning                                                            |
 |-------------|--------------------------------------------------------------------|
@@ -434,11 +433,11 @@ to stderr).
 
 ### `KD` — Kimura Divergence
 
-A numeric measure of sequence divergence within the seed alignment.
+A numeric measure of sequence divergence within the seed alignment. [optional]
 
 ### `BM` — Build method
 
-The command or pipeline used to build the alignment.
+Freeform description of the command or pipeline used to build the alignment. [optional]
 
 ```
 #=GF BM    RepeatModeler 2.0
@@ -470,14 +469,14 @@ actually resolves.  Pass `--no-network` to skip this.  bioRxiv/medRxiv version s
 
 ### `DR` — Database cross-reference
 
-A cross-reference to an external database.
+A cross-reference to an external database. [optional]
 
 ```
 #=GF DR    Repbase; AluSx
 #=GF DR    WikiPedia; Alu_element
 ```
 
-### `CC` — Comment / curatorial note
+### `CC` — Long description
 
 Free-form plain-text notes intended for human readers.  May appear multiple times.
 
@@ -504,11 +503,11 @@ it is the only identifier guaranteed to remain valid across database updates.
 
 **`ID` (name)** is a human-friendly label.  Names can be renamed when a family is
 reclassified or when a naming conflict is resolved.  They are typically preserved by
-demotion to a family alias. 
+demotion to a family alias.  Names are unique within Dfam. 
 
 For new submissions, the `AC` field will be absent until the record is accepted.  Duplicate
-`ID` values in the same file are errors unless one of the records carries an `AC` (which
-marks it as an update to an existing entry). 
+`ID` values in the same file or between the file and the current release are considered errors
+unless the records contain a `AC` (which marks it as an update to an existing Dfam entry).
 
 Automated pipeline names (e.g. `rnd-3_family-101` from RepeatModeler) must be replaced with
 meaningful names before submission.  They are almost always non-unique and will fail the
