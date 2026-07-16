@@ -74,28 +74,8 @@ GCA_000001405.15:chr1:100-200:+    ACGT--ACGT      # read, but warned
 
 Stockholm allows a long alignment to be split into **blocks**: the alignment is broken into
 column ranges, each sequence appears once per block, and the blocks are separated by blank
-lines.  HMMER and Pfam use this layout.
-
-**Dfam does not accept it.**  Every sequence must appear complete on a single line, however
-long that line becomes.  A blank line separating groups of sequence rows is reported as an
-error (`block_format`):
-
-```
-# Not accepted by Dfam — the blank line splits the alignment into two blocks:
-seq1    ACGTACGT
-seq2    ACGTACGT
-
-seq1    TTTTGGGG
-seq2    TTTTGGGG
-```
-
-When `stk lint` sees this it reports `block_format` and suppresses the alignment-derived
-checks, since a blocked file parses as one row per sequence *per block* — which would
-otherwise produce a cascade of misleading `sq_mismatch` and consensus errors.  Unwrap the
-alignment to one line per sequence and re-run.
-
-A blank line elsewhere in the record — between metadata fields, or immediately before the
-`//` terminator — is harmless and is not flagged.
+lines.  At this time Dfam does not permit the use of block format and requires that each
+seed sequence appears on a single line.
 
 ### The `#=GC RF` line
 
