@@ -571,7 +571,7 @@ Every sequence row in a Dfam seed file uses a **Smitten-format identifier** that
 precise genomic location of the copy:
 
 ```
-GCA_000001405.15:chr1:1234567-1234627:+
+GCA_000001405.15:chr1:1234567-1234627_+
 ```
 
 The components are:
