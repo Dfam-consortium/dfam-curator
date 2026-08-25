@@ -8,15 +8,12 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use dfam_curator::{
-    alignment::Orientation,
-    io::read_alignment,
-    matrix,
-};
+use aln_core::Strand;
+use dfam_curator::io::read_alignment;
 
 // ── TSD scoring matrix ────────────────────────────────────────────────────────
 
-/// Rows/cols indexed by matrix::alpha_idx(): A R G C Y T K M S W N X
+/// Rows/cols indexed by aln_core::consensus::alpha_idx(): A R G C Y T K M S W N X
 /// Values from the Dfam `tsdmatrix` file (FREQS A=0.295 C=0.205 G=0.205 T=0.295).
 #[rustfmt::skip]
 static TSD_MATRIX: [[i32; 12]; 12] = [
@@ -232,8 +229,8 @@ fn main() -> anyhow::Result<()> {
         match (lw, rw) {
             (Some(l), Some(r)) if l.len() == 2 * max_flank && r.len() == 2 * max_flank => {
                 let orient = match inst.orient {
-                    Orientation::Forward => '+',
-                    Orientation::Reverse => '-',
+                    Strand::Plus => '+',
+                    Strand::Minus => '-',
                 };
                 let label = format!("{}:{}-{}_{}", inst.name, inst.seq_start, inst.seq_end, orient);
                 windows.push(Window { lw: l, rw: r, seq: inst.seq.clone(), label });
@@ -340,7 +337,7 @@ fn main() -> anyhow::Result<()> {
 
         for i in 0..best_len {
             for b in [lslice[i].to_ascii_uppercase(), rslice[i].to_ascii_uppercase()] {
-                if let Some(idx) = matrix::alpha_idx(b) {
+                if let Some(idx) = aln_core::consensus::alpha_idx(b) {
                     if idx < 12 { count[i][idx] += 1; }
                 }
             }
@@ -358,7 +355,7 @@ fn main() -> anyhow::Result<()> {
             let score: i32 = (0..12)
                 .map(|col| TSD_MATRIX[row][col] * count[i][col] as i32)
                 .sum();
-            if score > max_score { max_score = score; best_char = matrix::alpha_byte(row); }
+            if score > max_score { max_score = score; best_char = aln_core::consensus::alpha_byte(row); }
         }
         cons.push(best_char as char);
     }

@@ -10,7 +10,8 @@ use std::process::Command;
 
 use anyhow::{bail, Context};
 
-use crate::alignment::{MultiAlign, Orientation, SequenceRow};
+use aln_core::msa::{MultiAlign, SequenceRow};
+use aln_core::Strand;
 
 // ── Search parameters ─────────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ pub struct BlastHit {
     /// Total subject sequence length.
     pub subj_len: u64,
     /// Forward = plus strand of subject; Reverse = minus strand.
-    pub orientation: Orientation,
+    pub orientation: Strand,
     /// Gapped query sequence from the alignment (gaps = b'-').
     pub query_seq: Vec<u8>,
     /// Gapped subject sequence from the alignment (gaps = b'-').
@@ -185,7 +186,7 @@ fn parse_hits(text: &str) -> anyhow::Result<Vec<BlastHit>> {
         let query_start: u64 = f[2].parse().context("qstart")?;
         let query_end: u64   = f[3].parse().context("qend")?;
         let query_len: u64   = f[4].parse().context("qlen")?;
-        let orientation      = if f[5] == "minus" { Orientation::Reverse } else { Orientation::Forward };
+        let orientation      = if f[5] == "minus" { Strand::Minus } else { Strand::Plus };
         let subj_name        = f[6].to_string();
         let subj_start: u64  = f[7].parse().context("sstart")?;
         let subj_end: u64    = f[8].parse().context("send")?;
@@ -224,7 +225,11 @@ fn parse_hits(text: &str) -> anyhow::Result<Vec<BlastHit>> {
 /// For reverse-strand hits the gapped alignment strings are reverse-
 /// complemented before mapping so that all rows are in the same strand
 /// orientation as the reference.
-pub fn hits_to_multialign(ref_seq: &[u8], ref_name: &str, hits: &[BlastHit]) -> MultiAlign {
+pub fn hits_to_multialign(
+    ref_seq: &[u8],
+    ref_name: &str,
+    hits: &[BlastHit],
+) -> anyhow::Result<MultiAlign> {
     let width = ref_seq.len();
     let reference = SequenceRow::new(ref_name, ref_seq.to_vec());
 
@@ -241,7 +246,7 @@ pub fn hits_to_multialign(ref_seq: &[u8], ref_name: &str, hits: &[BlastHit]) -> 
             //
             // To place in the forward MSA we RC both strings; after reversal the
             // pair reads left-to-right in plus-strand order starting at sstart.
-            let (sseq, qseq): (Vec<u8>, Vec<u8>) = if hit.orientation == Orientation::Reverse {
+            let (sseq, qseq): (Vec<u8>, Vec<u8>) = if hit.orientation == Strand::Minus {
                 let s: Vec<u8> = hit.subj_seq.iter().rev().map(|&b| iupac_complement(b)).collect();
                 let q: Vec<u8> = hit.query_seq.iter().rev().map(|&b| iupac_complement(b)).collect();
                 (s, q)
@@ -270,7 +275,9 @@ pub fn hits_to_multialign(ref_seq: &[u8], ref_name: &str, hits: &[BlastHit]) -> 
         })
         .collect();
 
-    MultiAlign::from_sequences(reference, instances)
+    // Every row is built at the reference's width just above, so a ragged
+    // row would be a bug here rather than bad input.
+    MultiAlign::from_sequences(reference, instances).map_err(anyhow::Error::from)
 }
 
 /// Write a single named sequence to a FASTA file (utility used by the refiner).
@@ -310,7 +317,7 @@ mod tests {
         let h = &hits[0];
         assert_eq!(h.score, 500);
         assert_eq!(h.query_name, "seq1");
-        assert_eq!(h.orientation, Orientation::Forward);
+        assert_eq!(h.orientation, Strand::Plus);
         assert_eq!(h.subj_start, 1);
         assert_eq!(&h.query_seq, b"ACGT-ACG");
     }
@@ -319,7 +326,7 @@ mod tests {
     fn parse_reverse_hit() {
         let line = "300\tseq2\t50\t100\t200\tminus\tcons\t10\t60\t800\tACGT\tACGT";
         let hits = parse_hits(line).unwrap();
-        assert_eq!(hits[0].orientation, Orientation::Reverse);
+        assert_eq!(hits[0].orientation, Strand::Minus);
     }
 
     #[test]
@@ -333,11 +340,11 @@ mod tests {
             query_start: 1, query_end: 4, query_len: 4,
             subj_name: "ref".to_string(),
             subj_start: 1, subj_end: 4, subj_len: 4,
-            orientation: Orientation::Forward,
+            orientation: Strand::Plus,
             query_seq: b"ACGT".to_vec(),
             subj_seq:  b"ACGT".to_vec(),
         };
-        let msa = hits_to_multialign(ref_seq, "ref", &[hit]);
+        let msa = hits_to_multialign(ref_seq, "ref", &[hit]).unwrap();
         assert_eq!(msa.num_instances(), 1);
         assert_eq!(msa.instance(0).unwrap().seq, b"ACGT");
     }
@@ -355,11 +362,11 @@ mod tests {
             query_start: 1, query_end: 3, query_len: 3,
             subj_name: "ref".to_string(),
             subj_start: 3, subj_end: 6, subj_len: 8,
-            orientation: Orientation::Forward,
+            orientation: Strand::Plus,
             query_seq: b"CG-A".to_vec(),
             subj_seq:  b"CGTA".to_vec(),
         };
-        let msa = hits_to_multialign(ref_seq, "ref", &[hit]);
+        let msa = hits_to_multialign(ref_seq, "ref", &[hit]).unwrap();
         let row = &msa.instance(0).unwrap().seq;
         // Columns 0-1: space padding; 2: C; 3: G; 4: -; 5: A; 6-7: space padding
         assert_eq!(row[0], b' ');
@@ -383,11 +390,11 @@ mod tests {
             query_start: 1, query_end: 5, query_len: 5,
             subj_name: "ref".to_string(),
             subj_start: 1, subj_end: 4, subj_len: 4,
-            orientation: Orientation::Forward,
+            orientation: Strand::Plus,
             query_seq: b"ACXGT".to_vec(),
             subj_seq:  b"AC-GT".to_vec(),
         };
-        let msa = hits_to_multialign(ref_seq, "ref", &[hit]);
+        let msa = hits_to_multialign(ref_seq, "ref", &[hit]).unwrap();
         let row = &msa.instance(0).unwrap().seq;
         assert_eq!(row.len(), 4);
         assert_eq!(row, b"ACGT"); // X dropped; A,C,G,T placed at cols 0-3

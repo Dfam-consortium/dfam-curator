@@ -12,9 +12,11 @@
 /// | `OS` species name | `#=GF OC` (name only, not the `OC` lineage) |
 /// | `RN`/`RA`/`RT`/`RL` | Stockholm reference block |
 /// | `DE` + `CC` | `#=GF CC` |
+/// | `FT` feature table | `#=GF FT` (key + location, then one qualifier per line) |
 /// | MSA consensus (reference row) | `#=GC RF` |
 /// | MSA instances | sequence rows (id `name:start-end_orient`) |
-use crate::alignment::{MultiAlign, Orientation};
+use aln_core::msa::MultiAlign;
+use aln_core::Strand;
 use crate::dfam::lint::rf_consensus_status;
 use crate::dfam::record::{RawDfamRecord, SeqRow};
 use crate::io::ig_family::{IgFamilyRecord, IgReference};
@@ -323,6 +325,23 @@ pub fn to_stk_record(family: &IgFamilyRecord, msa: &MultiAlign) -> RepbaseImport
         rec.gf.push(("CC".into(), cc.clone()));
     }
 
+    // Repbase FT feature table → #=GF FT, one qualifier per line.  Qualifier values
+    // are deliberately not wrapped: the Stockholm reader trims #=GF values, so a
+    // wrapped line would come back indistinguishable from a new feature key.  The
+    // leading `/` is what makes a qualifier line self-identifying.
+    for feat in &family.features {
+        rec.gf
+            .push(("FT".into(), format!("{} {}", feat.key, feat.location)));
+        for (name, value) in &feat.qualifiers {
+            let line = if value.is_empty() {
+                format!("/{}", name)
+            } else {
+                format!("/{}=\"{}\"", name, value)
+            };
+            rec.gf.push(("FT".into(), line));
+        }
+    }
+
     // Curator notes (**) carrying the Repbase Reports submission date(s).
     for note in submission_notes {
         rec.gf.push(("**".into(), note));
@@ -428,13 +447,13 @@ fn seq_to_string(seq: &[u8]) -> String {
 
 /// Format an instance identifier as `name:start-end_orient`, or bare `name` when
 /// the row carries no coordinates.
-fn instance_id(row: &crate::alignment::SequenceRow) -> String {
+fn instance_id(row: &aln_core::msa::SequenceRow) -> String {
     if row.seq_start == 0 && row.seq_end == 0 {
         return row.name.clone();
     }
     let orient = match row.orient {
-        Orientation::Forward => '+',
-        Orientation::Reverse => '-',
+        Strand::Plus => '+',
+        Strand::Minus => '-',
     };
     format!("{}:{}-{}_{}", row.name, row.seq_start, row.seq_end, orient)
 }
@@ -442,7 +461,7 @@ fn instance_id(row: &crate::alignment::SequenceRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alignment::{MultiAlign, SequenceRow};
+    use aln_core::msa::{MultiAlign, SequenceRow};
     use crate::io::ig_family::{IgFamilyRecord, IgReference};
 
     fn sample_family() -> IgFamilyRecord {
@@ -467,6 +486,7 @@ mod tests {
                 location: Some("Direct Submission to RR (8-Jul-2026)".into()),
             }],
             comments: vec!["~96% identical to consensus.".into()],
+            features: Vec::new(),
             sq_summary: Some("Sequence 8 BP;".into()),
             consensus_name: Some("Mariner-N5_CyaStr".into()),
             // Ungapped form of the sample MSA consensus row (ACGT-ACGT → ACGTACGT).
@@ -479,7 +499,7 @@ mod tests {
         let mut inst = SequenceRow::new("JAOVFP01_1", b"ACGT-ACGT".to_vec());
         inst.seq_start = 1;
         inst.seq_end = 9;
-        MultiAlign::from_sequences(cons, vec![inst])
+        MultiAlign::from_sequences(cons, vec![inst]).expect("fixture rows are equal width")
     }
 
     fn gf<'a>(r: &'a RawDfamRecord, tag: &str) -> Vec<&'a str> {
@@ -638,7 +658,7 @@ mod tests {
         let cons = SequenceRow::new("cons", b"AAAA".to_vec());
         let i1 = SequenceRow::new("i1", b"CCCC".to_vec());
         let i2 = SequenceRow::new("i2", b"CCCC".to_vec());
-        let msa = MultiAlign::from_sequences(cons, vec![i1, i2]);
+        let msa = MultiAlign::from_sequences(cons, vec![i1, i2]).expect("fixture rows are equal width");
         let mut fam = sample_family();
         fam.consensus = b"AAAA".to_vec(); // match the MSA consensus so only check (B) fires
         let out = to_stk_record(&fam, &msa);

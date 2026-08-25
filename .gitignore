@@ -36,3 +36,9 @@ dfam-coord.backup/
 
 # Large example datasets not tracked in git
 examples/some_discordance/
+
+# Test-run output, not fixtures. `tests/file_processing.rs` writes these on
+# every run and compares against the `expected-*` files instead; tracking them
+# means a diff after every `cargo test`, always in the `##` header timings that
+# `normalize_log` deliberately ignores.
+tests/data/input/*/stdout*.log

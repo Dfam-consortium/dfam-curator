@@ -131,8 +131,55 @@ CTGGATAATTTCGACC...
 | `OS` species name | `#=GF OC` | taxon name only; the `;OC` lineage is dropped |
 | `RN`/`RA`/`RT`/`RL` | reference block *or* `AU` + `**` | see **Reference handling** |
 | `DE`, then `CC` | `#=GF CC` | |
+| `FT` feature table | `#=GF FT` | key + location, then one qualifier per line; see **Feature table** |
 | MSA consensus (first row) | `#=GC RF` | |
 | MSA instances | sequence rows | id `name:start-end_orient` from `FRAGMENT` |
+
+### Feature table (`;FT` → `#=GF FT`)
+
+Autonomous families carry a `;FH`/`;FT` feature table describing their coding
+regions.  It is copied across verbatim — locations are **not** rewritten and
+`/translation` is **not** recomputed:
+
+```
+;FH   Key           Location/Qualifiers
+;FT   CDS           490..4569
+;FT                 /product="Gypsy-13_AnMou-I_1p"
+;FT                 /note="SAP domain, zinc finger, retropepsin,
+;FT                 reverse transcriptase, ribonuclease H, and integrase."
+;FT                 /translation="MEVTDKVAELVESFTRTGLVKKCEAKNLSTSGTKEEL
+;FT                 AARLANLSESEERGAEQSLLNSTGVAEFVDAQTIPDMVRPTTFNFNDVKEA"
+```
+
+becomes
+
+```
+#=GF FT    CDS 490..4569
+#=GF FT    /product="Gypsy-13_AnMou-I_1p"
+#=GF FT    /note="SAP domain, zinc finger, retropepsin, reverse transcriptase, ribonuclease H, and integrase."
+#=GF FT    /translation="MEVTDKVAELVESFTRTGLVKKCEAKNLSTSGTKEELAARLANLSESEERGAEQSLLNSTGVAEFVDAQTIPDMVRPTTFNFNDVKEA"
+```
+
+Notes on the transform:
+
+- **Wrapping is undone.** A wrapped location concatenates; a wrapped free-text
+  qualifier rejoins with a space; a wrapped `/translation` rejoins with **no**
+  separator (EMBL wraps it mid-token). Output values are never re-wrapped — see
+  `Dfam_Seeds.md` for why.
+- **The location column is read from the `;FH` header**, which names it
+  (`Key           Location/Qualifiers`), rather than being hard-coded. Records
+  with no `;FH` fall back to column 19, which is what Repbase writes throughout
+  RepBase31.06.
+- **`/translation` is carried across, not regenerated.** In a survey of all 67,085
+  CDS features in RepBase31.06, 98.9% of translations reproduce exactly from their
+  location — but the ~1% that do not are mostly records whose location is itself
+  broken (a CDS running past the end of its own sequence, a span that is not a
+  multiple of 3, or a mitochondrial genetic code), and those translations cannot be
+  recovered from the record at all. Dropping the field is irreversible; keeping it
+  is not.
+- Repbase locations use **descending coordinates for the minus strand** rather than
+  `complement()`, and their `join()` segments may legitimately overlap. Both are
+  documented in `Dfam_Seeds.md` under `FT`.
 
 ### Classification (`KW` → `#=GF TP`)
 

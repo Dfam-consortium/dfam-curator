@@ -4,8 +4,8 @@
 /// by the Linup footer (Avg Kimura, INFO, Cons length, FASTA consensus).
 use std::io::{self, Write};
 
-use crate::alignment::{MultiAlign, Orientation};
-use crate::kimura;
+use aln_core::msa::MultiAlign;
+use aln_core::Strand;
 
 /// Write the alignment to `out` in Linup pretty-print format.
 ///
@@ -92,7 +92,7 @@ pub fn write(
     let mut coord: Vec<u64> = (0..n)
         .map(|i| {
             let inst = &msa.sequences[i + 1];
-            if inst.orient == Orientation::Reverse {
+            if inst.orient == Strand::Minus {
                 inst.seq_end
             } else {
                 inst.seq_start
@@ -179,7 +179,7 @@ pub fn write(
                 coord[i]
             };
             let end_adj = nl.saturating_sub(1);
-            let disp_end = if inst.orient == Orientation::Reverse {
+            let disp_end = if inst.orient == Strand::Minus {
                 disp_start.saturating_sub(end_adj)
             } else {
                 disp_start + end_adj
@@ -187,7 +187,7 @@ pub fn write(
 
             write_row(out, &inst.name, max_id_len, disp_start, max_coord_len, &bslice, block_size, disp_end, Some(line_id[i]))?;
 
-            if inst.orient == Orientation::Reverse {
+            if inst.orient == Strand::Minus {
                 coord[i] = coord[i].saturating_sub(nl);
             } else {
                 coord[i] += nl;
@@ -204,8 +204,10 @@ pub fn write(
 
     let instances: Vec<&[u8]> = msa.sequences[1..].iter().map(|s| s.seq.as_slice()).collect();
     // mean_kimura returns percent (0–100); Linup prints the 0–1 value.
-    let avg_k    = kimura::mean_kimura(consensus, &instances, false) / 100.0;
-    let avg_kadj = kimura::mean_kimura(consensus, &instances, true)  / 100.0;
+    let avg_k = aln_core::stats::mean_kimura(
+        consensus, &instances, false, aln_core::stats::Masking::Ignore) / 100.0;
+    let avg_kadj = aln_core::stats::mean_kimura(
+        consensus, &instances, true, aln_core::stats::Masking::Ignore) / 100.0;
     writeln!(out, "Avg Kimura Div: {:.2}", avg_k)?;
     writeln!(out, "Avg Kimura Div (CpG adjusted): {:.2}", avg_kadj)?;
 

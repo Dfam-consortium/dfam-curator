@@ -11,9 +11,9 @@ use clap::{Parser, ValueEnum};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
+use aln_core::consensus::ConsensusParams;
 use dfam_curator::{
-    alignment::MultiAlign,
-    consensus::ConsensusParams,
+    MultiAlign,
     io::read_alignment,
 };
 
@@ -136,7 +136,7 @@ fn main() -> anyhow::Result<()> {
         let text = std::fs::read_to_string(&args.input)
             .with_context(|| format!("failed to read {}", args.input.display()))?;
         let hits = dfam_curator::blast::parse_tab(&text)?;
-        dfam_curator::blast::hits_to_multialign(&ref_seq, &ref_name, &hits)
+        dfam_curator::blast::hits_to_multialign(&ref_seq, &ref_name, &hits)?
     } else if let Some(ref select) = args.select {
         let fmt = dfam_curator::io::detect_format(&args.input)
             .with_context(|| format!("failed to detect format of {}", args.input.display()))?;
@@ -216,12 +216,11 @@ fn main() -> anyhow::Result<()> {
                         i += 1;
                     }
                 }
-                msa.invalidate_consensus();
             }
         }
     }
 
-    // ── Orientation ───────────────────────────────────────────────────────────
+    // ── Strand ───────────────────────────────────────────────────────────
     if args.revcomp {
         msa.reverse_complement();
     }
@@ -236,7 +235,7 @@ fn main() -> anyhow::Result<()> {
         let start = if params.include_reference { 0 } else { 1 };
         msa.sequences[start..].iter().map(|s| s.seq.as_slice()).collect()
     };
-    let consensus = dfam_curator::consensus::build_consensus_from_sequences(&raw_seqs, &params);
+    let consensus = aln_core::consensus::build_consensus_from_sequences(&raw_seqs, &params);
 
     // ── Output ────────────────────────────────────────────────────────────────
     let stdout = std::io::stdout();
@@ -291,7 +290,7 @@ fn build_consensus(msa: &MultiAlign, include_ref: bool) -> Vec<u8> {
         .iter()
         .map(|s| s.seq.as_slice())
         .collect();
-    dfam_curator::consensus::build_consensus_from_sequences(&raw, &params)
+    aln_core::consensus::build_consensus_from_sequences(&raw, &params)
 }
 
 /// Parse "START-END" into (start, end) as 1-based integers.
@@ -363,8 +362,8 @@ fn read_first_fasta_seq(path: &PathBuf) -> anyhow::Result<(String, Vec<u8>)> {
 }
 
 fn print_stats(msa: &MultiAlign, consensus: &[u8], out: &mut dyn Write) -> std::io::Result<()> {
-    use dfam_curator::alignment::Orientation;
-    use dfam_curator::kimura::kimura_pair;
+    use aln_core::stats::{kimura_stats, Masking};
+    use aln_core::Strand;
 
     let reference = match msa.reference() {
         Some(r) => r,
@@ -383,18 +382,26 @@ fn print_stats(msa: &MultiAlign, consensus: &[u8], out: &mut dyn Write) -> std::
     let mut num_high = 0usize;
 
     for inst in &msa.sequences[1..] {
-        let rs = kimura_pair(&reference.seq, &inst.seq);
-        let cs = kimura_pair(consensus, &inst.seq);
+        // aln-core takes (query, subject) with the CpG look-back over the
+        // subject, so the reference/consensus goes second.
+        let (Ok(rs), Ok(cs)) = (
+            kimura_stats(&inst.seq, &reference.seq, Masking::Ignore),
+            kimura_stats(&inst.seq, consensus, Masking::Ignore),
+        ) else {
+            continue; // ragged row; nothing meaningful to report for it
+        };
 
-        let rk  = if rs.kimura.is_finite()          { rs.kimura }          else { 100.0 };
-        let rkm = if rs.kimura_adjusted.is_finite()  { rs.kimura_adjusted } else { 100.0 };
-        let ck  = if cs.kimura.is_finite()           { cs.kimura }          else { 100.0 };
-        let ckm = if cs.kimura_adjusted.is_finite()  { cs.kimura_adjusted } else { 100.0 };
+        // An undefined divergence (saturated log, or no comparable bases) is
+        // reported as 100%, as before.
+        let rk = rs.kimura.unwrap_or(100.0);
+        let rkm = rs.kimura_adjusted.unwrap_or(100.0);
+        let ck = cs.kimura.unwrap_or(100.0);
+        let ckm = cs.kimura_adjusted.unwrap_or(100.0);
 
         let is_high = rk >= 90.0;
         if is_high { num_high += 1; }
 
-        let (coords, prefix) = if inst.orient == Orientation::Reverse {
+        let (coords, prefix) = if inst.orient == Strand::Minus {
             (format!("{}-{}", inst.seq_end, inst.seq_start), is_high)
         } else {
             (format!("{}-{}", inst.seq_start, inst.seq_end), is_high)
@@ -408,8 +415,8 @@ fn print_stats(msa: &MultiAlign, consensus: &[u8], out: &mut dyn Write) -> std::
         writeln!(out,
             "{}\t{}\t{:.1}\t{}\t{:.2}\t{:.2}\t{}\t{}\t\t{}\t{:.1}\t{}\t{:.2}\t{:.2}\t{}\t{}",
             label,
-            rs.transitions, rs.transitions_adjusted, rs.transversions, rk, rkm, rs.cpg_sites, rs.well_characterised,
-            cs.transitions, cs.transitions_adjusted, cs.transversions, ck, ckm, cs.cpg_sites, cs.well_characterised,
+            rs.transitions, rs.transitions_adjusted, rs.transversions, rk, rkm, rs.cpg_sites, rs.well_characterized,
+            cs.transitions, cs.transitions_adjusted, cs.transversions, ck, ckm, cs.cpg_sites, cs.well_characterized,
         )?;
 
         sum_r_kim     += rk;

@@ -1,6 +1,47 @@
 [workspace]
-members = [".", "dfam-coord", "dfam-stk-io"]
+members = [".", "dfam-coord", "cons-core", "autocons", "te-composer"]
+# A bare `cargo build` builds the root package's binaries plus te-composer.
+# `autocons` is excluded deliberately: it exists to reproduce the C++ for
+# comparison work, and additionally gates its binary behind its own feature.
+default-members = [".", "te-composer"]
 resolver = "2"
+
+# The consensus-building tools live here alongside linup/stk/discoord; the
+# alignment foundation they sit on is dfam-lib, consumed from its published tag.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "CC0-1.0"
+
+[workspace.dependencies]
+# dfam-lib comes from its published tag rather than a sibling directory. A path
+# dependency ties this workspace to a particular layout on one machine — when
+# dfam-lib was relocated, every crate here stopped building until the paths were
+# edited.
+#
+# To develop against a local dfam-lib checkout, uncomment the [patch] section at
+# the foot of this file: cargo then substitutes the working copy for the tag
+# without the manifests changing, so what is committed stays reproducible.
+
+aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+cons-core = { path = "cons-core" }
+
+# RepeatAfterMe supplies the RAMExtend engine used by `te-composer --genome`,
+# consumed from its published tag like dfam-lib above. The tag's ram-core pins
+# dfam-lib 0.1.0, the same tag this workspace uses, so the graph carries one
+# copy of aln-core.
+ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.1.0" }
+# Genomic identifiers on the input sequences are parsed with the canonical
+# Smitten implementation rather than a local regex, so that recursive ranges
+# normalize correctly.
+smitten = { git = "https://github.com/Dfam-consortium/Smitten.git", tag = "1.0.2" }
+rayon = "1"
+thiserror = "2"
 
 [workspace.metadata.dist]
 cargo-dist-version = "0.28.0"
@@ -30,6 +71,10 @@ name = "stk"
 path = "src/bin/stk.rs"
 
 [[bin]]
+name = "callcons"
+path = "src/bin/callcons.rs"
+
+[[bin]]
 name = "update-cache"
 path = "src/bin/update-cache.rs"
 
@@ -52,6 +97,29 @@ strsim = "0.11"
 regex = "1"
 ureq = "2"
 dfam-coord = { path = "dfam-coord" }
-dfam-stk-io = { path = "dfam-stk-io" }
+dfam-stk-io.workspace = true
+aln-core.workspace = true
 
 [dev-dependencies]
+
+# Local dfam-lib development — INACTIVE. Uncomment to build against a working
+# copy instead of the tag above, then comment it out again (and let Cargo.lock
+# re-resolve) before committing anything others must build from the tag alone.
+#
+# Note that RepeatAfterMe's crates also depend on dfam-lib by tag. This patch
+# rewrites the git source for the whole dependency graph, so they follow the
+# working copy too and everything stays on one copy of aln-core — which is the
+# reason they must not use path dependencies of their own.
+#[patch."https://github.com/Dfam-consortium/dfam-lib"]
+#aln-core      = { path = "../dfam-lib-project/dfam-lib/aln-core" }
+#aln-engine    = { path = "../dfam-lib-project/dfam-lib/aln-engine" }
+#aln-parasail  = { path = "../dfam-lib-project/dfam-lib/aln-parasail" }
+#aln-rmblast   = { path = "../dfam-lib-project/dfam-lib/aln-rmblast" }
+#aln-reference = { path = "../dfam-lib-project/dfam-lib/aln-reference" }
+#dfam-stk-io   = { path = "../dfam-lib-project/dfam-lib/dfam-stk-io" }
+
+# Local RepeatAfterMe development — INACTIVE, and the same rules apply. The path
+# below is the public RepeatAfterMe checkout, which is where ram-core lives; the
+# private denovo repository does not carry that crate.
+#[patch."https://github.com/Dfam-consortium/RepeatAfterMe"]
+#ram-core      = { path = "../RepeatAfterMe/ram-core" }

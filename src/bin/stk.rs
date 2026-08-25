@@ -4,6 +4,7 @@
 ///   lint     Validate one or more STK files and report diagnostics.
 ///   edit     Modify #=GF annotation fields across records.
 ///   convert  Convert between alignment formats (STK, MSA, raw-seqs, consensus, reference).
+///   map-consensus  Map a hand-built consensus onto a record's alignment as #=GC RF.
 ///
 /// Exit status for `lint`: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
 /// Exit status for `edit`: 0 = success, 2 = I/O failure.
@@ -14,8 +15,8 @@ use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
+use aln_core::consensus::{build_consensus_from_sequences, ConsensusParams};
 use dfam_curator::{
-    consensus::{build_consensus_from_sequences, ConsensusParams},
     dfam::{
         cache::{cache_dir, load_cache, missing_cache_files, refresh_cache, RefreshMode},
         clean::{clean_record, CleanReport},
@@ -60,6 +61,8 @@ enum Cmd {
     Convert(ConvertArgs),
     /// Import a Repbase IG MSA + family record into a Dfam Stockholm record.
     RepbaseImport(RepbaseImportArgs),
+    /// Map a hand-built consensus onto a record's alignment and store it as #=GC RF.
+    MapConsensus(MapConsensusArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -70,6 +73,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Extract(args) => run_extract(args),
         Cmd::Convert(args) => run_convert(args),
         Cmd::RepbaseImport(args) => run_repbase_import(args),
+        Cmd::MapConsensus(args) => run_map_consensus(args),
     }
 }
 
@@ -821,7 +825,7 @@ fn convert_stk_input(
 /// as the provenance tag in raw-seqs descriptions.  For STK output the
 /// consensus sequence is recomputed and written as `#=GC RF`.
 fn convert_one_record(
-    msa: &dfam_curator::alignment::MultiAlign,
+    msa: &aln_core::msa::MultiAlign,
     to: &OutFormat,
     fam_id: Option<&str>,
     stem: &str,
@@ -873,7 +877,7 @@ fn build_provenance(fam_id: Option<&str>, stem: &str, record_num: usize) -> Stri
 
 /// Write instance sequences as ungapped FASTA with provenance in the description.
 fn write_raw_seqs(
-    msa: &dfam_curator::alignment::MultiAlign,
+    msa: &aln_core::msa::MultiAlign,
     fam_id: Option<&str>,
     stem: &str,
     record_num: usize,
@@ -893,7 +897,7 @@ fn write_raw_seqs(
     Ok(())
 }
 
-fn compute_consensus(msa: &dfam_curator::alignment::MultiAlign) -> Vec<u8> {
+fn compute_consensus(msa: &aln_core::msa::MultiAlign) -> Vec<u8> {
     let seqs: Vec<&[u8]> = msa.sequences[1..].iter().map(|s| s.seq.as_slice()).collect();
     build_consensus_from_sequences(&seqs, &ConsensusParams::default())
 }
@@ -1049,4 +1053,357 @@ fn run_repbase_import(args: RepbaseImportArgs) -> anyhow::Result<()> {
     out.flush()?;
     report_clean("stk repbase-import", &clean_report);
     Ok(())
+}
+
+// ── map-consensus subcommand ──────────────────────────────────────────────────
+
+#[derive(Args, Debug)]
+struct MapConsensusArgs {
+    /// FASTA file holding the hand-built consensus.
+    /// Only the first record is used; any gap characters are stripped.
+    #[arg(long = "hb", value_name = "FILE")]
+    hb: PathBuf,
+
+    /// Only map onto the record matching SELECT.
+    /// A purely numeric value selects by 1-based record number; any other value
+    /// selects by exact #=GF ID match.  Required for multi-record files, since a
+    /// hand-built consensus belongs to exactly one family.
+    #[arg(long, value_name = "SELECT")]
+    select: Option<String>,
+
+    /// Penalty for opening a run of new alignment columns.
+    /// Lower it to force short insertions that the default declines to make.
+    #[arg(long, value_name = "N", default_value_t = 30.0)]
+    gap_open: f64,
+
+    /// Per-column penalty for extending a run of new alignment columns.
+    #[arg(long, value_name = "N", default_value_t = 3.0)]
+    gap_extend: f64,
+
+    /// Require the hand-built consensus to span the full alignment width
+    /// instead of being allowed to cover only part of it.
+    #[arg(long)]
+    no_free_ends: bool,
+
+    /// Minimum identity to the called consensus, over the positions that map
+    /// onto existing columns.  Below this the mapping is refused.
+    #[arg(long, value_name = "F", default_value_t = 0.70)]
+    min_identity: f64,
+
+    /// Maximum fraction by which the alignment may grow in width.
+    /// Above this the mapping is refused.
+    #[arg(long, value_name = "F", default_value_t = 0.10)]
+    max_growth: f64,
+
+    /// Minimum fraction of the alignment's columns the hand-built consensus
+    /// must span.  Below this the mapping is refused.
+    #[arg(long, value_name = "F", default_value_t = 0.50)]
+    min_coverage: f64,
+
+    /// Apply the mapping even when it fails the sanity thresholds.
+    #[arg(long)]
+    force: bool,
+
+    /// Report what would change and exit without writing anything.
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Write output to FILE instead of stdout.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    output: Option<PathBuf>,
+
+    /// Do not clean records on write.
+    #[arg(long)]
+    no_clean: bool,
+
+    /// One or more Stockholm files.
+    #[arg(required = true)]
+    input: Vec<PathBuf>,
+}
+
+/// Reverse-complement a plain nucleotide sequence.
+fn revcomp(seq: &[u8]) -> Vec<u8> {
+    seq.iter()
+        .rev()
+        .map(|&b| match b {
+            b'A' => b'T', b'a' => b't',
+            b'T' => b'A', b't' => b'a',
+            b'G' => b'C', b'g' => b'c',
+            b'C' => b'G', b'c' => b'g',
+            b'R' => b'Y', b'Y' => b'R', b'K' => b'M', b'M' => b'K',
+            b'D' => b'H', b'H' => b'D', b'B' => b'V', b'V' => b'B',
+            other => other,
+        })
+        .collect()
+}
+
+/// The gap character a record already uses, so surgery does not mix conventions.
+fn record_gap_char(record: &RawDfamRecord) -> u8 {
+    let uses_dot = record
+        .sequences
+        .iter()
+        .any(|r| r.aligned_seq.contains('.'))
+        || record.gc.get("RF").is_some_and(|rf| rf.contains('.'));
+    if uses_dot { b'.' } else { b'-' }
+}
+
+fn run_map_consensus(args: MapConsensusArgs) -> anyhow::Result<()> {
+    use dfam_curator::msa_align::AlignParams;
+
+    // ── Load the hand-built consensus ────────────────────────────────────────
+    let hb_msa = dfam_curator::io::fasta::read(&args.hb)
+        .with_context(|| format!("cannot read hand-built consensus {}", args.hb.display()))?;
+    let hb_row = hb_msa
+        .reference()
+        .ok_or_else(|| anyhow::anyhow!("{} contains no sequence", args.hb.display()))?;
+    let hb_name = hb_row.name.clone();
+    let hb: Vec<u8> = hb_row
+        .seq
+        .iter()
+        .filter(|&&b| b.is_ascii_alphabetic())
+        .map(|b| b.to_ascii_uppercase())
+        .collect();
+    if hb.is_empty() {
+        anyhow::bail!("{} contains no residues", args.hb.display());
+    }
+
+    let params = AlignParams {
+        gap_open: args.gap_open,
+        gap_extend: args.gap_extend,
+        free_end_gaps: !args.no_free_ends,
+    };
+
+    let mut sink: Box<dyn Write> = match (&args.output, args.dry_run) {
+        (_, true) => Box::new(std::io::sink()),
+        (None, _) => Box::new(BufWriter::new(std::io::stdout())),
+        (Some(p), _) => Box::new(BufWriter::new(
+            std::fs::File::create(p)
+                .with_context(|| format!("cannot create {}", p.display()))?,
+        )),
+    };
+
+    let mut clean_report = CleanReport::default();
+    let mut mapped_any = false;
+    let mut thresholds_failed = false;
+
+    for path in &args.input {
+        let f = std::fs::File::open(path)
+            .with_context(|| format!("cannot open {}", path.display()))?;
+
+        for result in iter_records_raw(BufReader::new(f)) {
+            let mut record = result
+                .with_context(|| format!("parse error in {}", path.display()))?;
+
+            let selected = args
+                .select
+                .as_deref()
+                .map(|sel| record_selected(&record, sel))
+                .unwrap_or(true);
+
+            if selected {
+                if mapped_any {
+                    anyhow::bail!(
+                        "{} holds more than one record; use --select to name the \
+                         family the hand-built consensus belongs to",
+                        path.display()
+                    );
+                }
+                if !map_consensus_onto(&mut record, &hb, &hb_name, &params, &args)? {
+                    thresholds_failed = true;
+                }
+                mapped_any = true;
+            }
+
+            if !args.no_clean {
+                clean_report.merge(clean_record(&mut record));
+            }
+            record.write_to(&mut sink)?;
+        }
+    }
+
+    sink.flush()?;
+
+    if !mapped_any {
+        match &args.select {
+            Some(sel) => anyhow::bail!("no record matching {:?}", sel),
+            None => anyhow::bail!("no records found in input"),
+        }
+    }
+    if !args.dry_run && !args.no_clean {
+        report_clean("stk map-consensus", &clean_report);
+    }
+    if thresholds_failed && args.dry_run {
+        anyhow::bail!("hand-built consensus failed the sanity thresholds; nothing was written");
+    }
+    Ok(())
+}
+
+/// Align `hb` to `record`'s alignment, check the result is sane, then perform
+/// the column surgery and store the mapping as `#=GC RF`.
+fn map_consensus_onto(
+    record: &mut RawDfamRecord,
+    hb: &[u8],
+    hb_name: &str,
+    params: &dfam_curator::msa_align::AlignParams,
+    args: &MapConsensusArgs,
+) -> anyhow::Result<bool> {
+    use dfam_curator::msa_align::{
+        align_to_profile, profile_from_rows, query_row_padded, splice_row,
+    };
+
+    if record.sequences.is_empty() {
+        anyhow::bail!("{}: record has no sequence rows to map onto", record.label());
+    }
+
+    let gap = record_gap_char(record);
+
+    // Normalise every Stockholm gap character to '-' for scoring, matching what
+    // the consensus caller does.
+    let rows: Vec<Vec<u8>> = record
+        .sequences
+        .iter()
+        .map(|r| {
+            r.aligned_seq
+                .bytes()
+                .map(|b| if b == b'.' || b == b'_' || b == b'~' { b'-' } else { b })
+                .collect()
+        })
+        .collect();
+    let row_refs: Vec<&[u8]> = rows.iter().map(|v| v.as_slice()).collect();
+
+    let profile = profile_from_rows(&row_refs);
+    let consensus = build_consensus_from_sequences(&row_refs, &ConsensusParams::default());
+
+    let mapping = align_to_profile(hb, &profile, params)
+        .with_context(|| format!("{}: cannot map hand-built consensus", record.label()))?;
+    let stats = mapping.stats(hb, &consensus);
+
+    // ── Sanity checks ────────────────────────────────────────────────────────
+    let mut passed = true;
+    let mut problems: Vec<String> = Vec::new();
+    if stats.identity < args.min_identity {
+        problems.push(format!(
+            "identity to the called consensus is {:.1}% over {} mapped positions \
+             (--min-identity {:.0}%)",
+            stats.identity * 100.0,
+            stats.placed,
+            args.min_identity * 100.0
+        ));
+    }
+    if stats.width_growth > args.max_growth {
+        problems.push(format!(
+            "alignment would grow by {} columns, {:.1}% of its {} (--max-growth {:.0}%)",
+            stats.columns_added,
+            stats.width_growth * 100.0,
+            mapping.old_width,
+            args.max_growth * 100.0
+        ));
+    }
+    if stats.coverage < args.min_coverage {
+        problems.push(format!(
+            "hand-built consensus spans only {:.1}% of the alignment's {} columns \
+             (--min-coverage {:.0}%)",
+            stats.coverage * 100.0,
+            mapping.old_width,
+            args.min_coverage * 100.0
+        ));
+    }
+
+    if !problems.is_empty() {
+        // The single likeliest cause of a bad fit is a strand mix-up, and it is
+        // cheap to rule in or out now that we already know the forward score.
+        let rc = revcomp(hb);
+        if let Ok(rc_map) = align_to_profile(&rc, &profile, params) {
+            let rc_stats = rc_map.stats(&rc, &consensus);
+            if rc_stats.identity > stats.identity + 0.10 {
+                problems.push(format!(
+                    "the reverse complement fits far better ({:.1}% identity) — \
+                     the hand-built consensus looks reverse-complemented relative \
+                     to this alignment",
+                    rc_stats.identity * 100.0
+                ));
+            }
+        }
+
+        let detail = problems
+            .iter()
+            .map(|p| format!("  - {}", p))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if !args.force && !args.dry_run {
+            anyhow::bail!(
+                "{}: refusing to map {:?} onto this alignment:\n{}\n\
+                 Re-run with --force to apply it anyway, or --dry-run to inspect.",
+                record.label(),
+                hb_name,
+                detail
+            );
+        }
+        eprintln!(
+            "stk map-consensus: {}: {}:\n{}",
+            record.label(),
+            if args.dry_run { "would refuse" } else { "applying despite" },
+            detail
+        );
+        passed = false;
+    }
+
+    // ── Column surgery ───────────────────────────────────────────────────────
+    let insertions = mapping.insertions();
+
+    for row in &mut record.sequences {
+        // Dfam Stockholm has no space padding, so gap and pad are the same char.
+        let spliced = splice_row(row.aligned_seq.as_bytes(), &insertions, gap, gap);
+        row.aligned_seq = String::from_utf8(spliced)
+            .expect("splicing ASCII rows yields ASCII");
+    }
+
+    // Every per-column annotation has to be widened in step with the sequences.
+    // RF is about to be overwritten, so it is skipped here.
+    let gc_tags: Vec<String> = record.gc.keys().filter(|k| *k != "RF").cloned().collect();
+    for tag in gc_tags {
+        if let Some(value) = record.gc.get_mut(&tag) {
+            let spliced = splice_row(value.as_bytes(), &insertions, b'.', b'.');
+            *value = String::from_utf8_lossy(&spliced).into_owned();
+        }
+    }
+
+    let rf = query_row_padded(&mapping, hb, gap, gap);
+    record.gc.insert(
+        "RF".to_string(),
+        String::from_utf8(rf).expect("query row is ASCII"),
+    );
+
+    // The RF line is no longer a called consensus; say so.
+    apply_ops(
+        record,
+        &[Op::Set { tag: "CT".to_string(), value: "handbuilt".to_string() }],
+    );
+
+    eprintln!(
+        "stk map-consensus: {}: {} placed ({:.1}% identity to the called consensus), \
+         {} inserted, {} columns skipped; width {} -> {}",
+        record.label(),
+        stats.placed,
+        stats.identity * 100.0,
+        stats.inserted,
+        stats.skipped,
+        mapping.old_width,
+        mapping.new_width,
+    );
+    if !insertions.is_empty() {
+        let sites = insertions
+            .iter()
+            .map(|(before, n)| format!("{}@{}", n, before))
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!(
+            "stk map-consensus: {}: new columns (count@original-column): {}",
+            record.label(),
+            sites
+        );
+    }
+
+    Ok(passed)
 }

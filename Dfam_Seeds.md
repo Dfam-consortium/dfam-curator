@@ -431,6 +431,108 @@ which discards the curator's hand-built version.  Since the stored consensus is 
 one, the `CT` field no longer describes it and is removed from the record (a note is written
 to stderr).
 
+#### Installing a hand-built consensus with `stk map-consensus`
+
+A hand-built consensus is authored outside the alignment, so its residues do not yet
+correspond to any column.  `stk map-consensus` aligns it to the record's column profile,
+performs the column surgery needed to make it fit, writes it as `#=GC RF`, and sets
+`#=GF CT handbuilt`:
+
+```
+stk map-consensus --hb handbuilt.fa --select MyFam seed.stk -o seed.mapped.stk
+```
+
+Where the hand-built consensus carries an insertion relative to the alignment, the mapping
+first tries to place it in columns that are *already* gap columns; only when there is no
+room does it insert new columns, gapping every sequence row — and every other per-column
+`#=GC` annotation — in step.  Where it carries a deletion, the `#=GC RF` line simply gains a
+gap and the alignment is untouched.  Indels are left-aligned, so the same input always
+produces the same columns.
+
+Because opening a column is scored well above a single substitution, an equal-length
+hand-built consensus is normally absorbed as substitutions with no surgery at all; surgery
+happens when the hand-built consensus changes length.  Lower `--gap-open` to force a short
+indel that the default declines to make.
+
+The mapping is refused, and nothing is written, when the result would be drastic:
+
+| Check | Default | Meaning |
+|-------|---------|---------|
+| `--min-identity` | 0.70 | identity to the called consensus over the mapped positions |
+| `--max-growth`   | 0.10 | fraction by which the alignment width may grow |
+| `--min-coverage` | 0.50 | fraction of the alignment's columns the consensus must span |
+
+On refusal the aligner also checks the reverse complement and says so when it fits markedly
+better, since a strand mix-up is the most common cause.  Use `--dry-run` to see the mapping
+statistics and the sites of any new columns without writing, and `--force` to apply a mapping
+that failed a threshold.
+
+### `FT` — Feature table
+
+Annotation of features located on the family consensus — principally the coding regions
+(`CDS`) of autonomous elements.  May appear multiple times.  [optional]
+
+Most families have no coding capacity and carry no `FT` at all.
+
+A feature is written as a **key + location** line followed by zero or more **qualifier**
+lines:
+
+```
+#=GF FT    CDS 490..4569
+#=GF FT    /product="Gypsy-13_AnMou-I_1p"
+#=GF FT    /note="SAP domain, zinc finger, retropepsin, reverse transcriptase, ribonuclease H, and integrase."
+#=GF FT    /translation="MEVTDKVAELVESFTRTGLVKKCEAKNLSTSGTKEELAARLANLSE..."
+```
+
+A line beginning with `/` is a qualifier belonging to the feature above it; any other line
+opens a new feature.  That leading `/` is the **only** thing separating the two, so:
+
+> **Qualifier values are never wrapped.**  A `#=GF` value is whitespace-trimmed when read,
+> so a wrapped continuation line would come back indistinguishable from a new feature key.
+> A long `/translation` is therefore one long line — which also makes it directly greppable.
+
+#### Locations
+
+Coordinates are 1-based and refer to the **ungapped `#=GC RF` consensus**, not to alignment
+columns.  The grammar is deliberately small:
+
+| Form | Meaning |
+|------|---------|
+| `490..4569` | a single span |
+| `join(a..b,c..d,…)` | segments concatenated, in the order given |
+| `5133..5095` | **descending coordinates mean the minus strand** |
+
+Note the last row.  This is inherited from Repbase, and it is *not* standard EMBL — Repbase
+never writes `complement()`, and never writes the `<`/`>` partial markers either.  A stock
+EMBL location parser will silently read these forward and produce nonsense.  `stk lint`
+rejects `complement()`, `<`, and `>` rather than guessing at them.
+
+Segments of a `join` may **overlap**, and the overlap is not an error.  Repbase builds a CDS
+for a frameshift-degraded consensus by chaining the maximal stop-to-stop ORF in each reading
+frame; two such ORFs in different frames necessarily overlap, since their stop codons fall in
+unrelated places.  A `join` may equally *skip* three bases, which steps over an in-frame stop
+codon the curator judged not to be ancestral.
+
+> **A `/translation` imported from Repbase is a reconstruction, not an observed protein.**
+> Where a location's segments overlap, the overlapping bases are translated twice in two
+> different frames, so a stretch of roughly `overlap/3` residues at each junction corresponds
+> to no correct reading of the consensus.  This is sound as a record of *which domains are
+> present*, which is what Repbase intends by it.  It is not suitable for protein domain
+> modelling without trimming the junctions first.
+
+#### Effect on `stk lint`
+
+| Check | Severity | Fires when |
+|-------|----------|------------|
+| `ft_orphan_qualifier` | error | a `/qualifier` line has no feature above it |
+| `ft_no_location` | error | a feature key has no location |
+| `ft_location_invalid` | error | the location is outside the grammar above |
+| `ft_coord_out_of_range` | error | a coordinate exceeds the ungapped `RF` length |
+| `ft_cds_span_not_codons` | warn | a `CDS` span is not a multiple of 3 |
+
+As with `CT`, note that `stk edit --update-consensus` rewrites `#=GC RF`.  `FT` coordinates
+are relative to that consensus, so they no longer describe it once it changes.
+
 ### `KD` — Kimura Divergence
 
 A numeric measure of sequence divergence within the seed alignment. [optional]

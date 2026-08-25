@@ -25,7 +25,8 @@
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-use crate::alignment::{MultiAlign, Orientation, SequenceRow};
+use aln_core::msa::{MultiAlign, SequenceRow};
+use aln_core::Strand;
 
 /// Read an IG MSA file into a `MultiAlign` (first record = reference/consensus).
 pub fn read(path: &Path) -> io::Result<MultiAlign> {
@@ -81,7 +82,8 @@ pub fn read(path: &Path) -> io::Result<MultiAlign> {
         .map(|(name, seq, frag)| make_instance_row(name, seq, frag))
         .collect();
 
-    Ok(MultiAlign::from_sequences(reference, instances))
+    MultiAlign::from_sequences(reference, instances)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
 /// Parse the coordinates from a `FRAGMENT a -> b` comment body (the text after `;`).
@@ -104,9 +106,9 @@ fn make_instance_row(name: String, seq: Vec<u8>, frag: Option<(u64, u64)>) -> Se
     let mut row = SequenceRow::new(name, seq);
     if let Some((a, b)) = frag {
         let (seq_start, seq_end, orient) = if a <= b {
-            (a, b, Orientation::Forward)
+            (a, b, Strand::Plus)
         } else {
-            (b, a, Orientation::Reverse)
+            (b, a, Strand::Minus)
         };
         row.seq_start = seq_start;
         row.seq_end = seq_end;
@@ -160,11 +162,11 @@ CTGGA----TAAT
         // Forward fragment 1 -> 9.
         assert_eq!(msa.sequences[1].seq_start, 1);
         assert_eq!(msa.sequences[1].seq_end, 9);
-        assert_eq!(msa.sequences[1].orient, Orientation::Forward);
+        assert_eq!(msa.sequences[1].orient, Strand::Plus);
         // Reverse fragment 9 -> 1 is normalized to start<=end, orient reverse.
         assert_eq!(msa.sequences[2].seq_start, 1);
         assert_eq!(msa.sequences[2].seq_end, 9);
-        assert_eq!(msa.sequences[2].orient, Orientation::Reverse);
+        assert_eq!(msa.sequences[2].orient, Strand::Minus);
     }
 
     #[test]

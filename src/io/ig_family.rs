@@ -41,6 +41,25 @@ pub struct IgReference {
     pub location: Option<String>,
 }
 
+/// One `FT` feature-table entry (e.g. a `CDS`) from a family record.
+///
+/// Content is held exactly as Repbase wrote it — the location string is *not*
+/// parsed or validated here, and the translation is *not* checked against the
+/// consensus.  Both happen in the translation phase.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct IgFeature {
+    /// Feature key, e.g. `CDS`.
+    pub key: String,
+    /// Location as written, with any line-wrapping rejoined — e.g. `490..4569`
+    /// or `join(312..602,1346..2053,2317..2817)`.  Note that Repbase encodes the
+    /// minus strand with *descending* coordinates (`join(5133..5095,4587..4357)`)
+    /// rather than EMBL's `complement()`.
+    pub location: String,
+    /// Qualifiers in document order, as `(name, value)` with the surrounding
+    /// quotes removed — e.g. `("product", "Gypsy-13_AnMou-I_1p")`.
+    pub qualifiers: Vec<(String, String)>,
+}
+
 /// A parsed IG/Repbase family record.
 ///
 /// Fields hold the raw parsed content; interpretation (KW→class, OS→OC, DE→CC, …)
@@ -68,12 +87,69 @@ pub struct IgFamilyRecord {
     pub references: Vec<IgReference>,
     /// `CC` comment lines (one entry per source line).
     pub comments: Vec<String>,
+    /// `FT` feature-table entries in document order (empty for the many Repbase
+    /// families with no coding capacity).
+    pub features: Vec<IgFeature>,
     /// `SQ` summary line content, if present.
     pub sq_summary: Option<String>,
     /// The bare identifier line that introduces the consensus (after `SQ`).
     pub consensus_name: Option<String>,
     /// Concatenated consensus sequence (ungapped).
     pub consensus: Vec<u8>,
+}
+
+/// Column at which an `FT` location/qualifier begins, for records that carry no
+/// `FH` header to name it.  Repbase writes 19 throughout RepBase31.06.
+const DEFAULT_LOC_COL: usize = 19;
+
+/// Split an `FT` body into `(key, content)` at the location column.
+///
+/// `body` has had the leading `;` removed, so it carries EMBL's layout verbatim:
+/// `FT   CDS           490..4569` — tag at `0..2`, key field at `2..loc_col`,
+/// location or qualifier from `loc_col`.  An empty key field means the line
+/// continues the feature above it.
+fn split_ft_line(body: &str, loc_col: usize) -> (String, String) {
+    let key_end = loc_col.min(body.len());
+    let key = body.get(2..key_end).unwrap_or("").trim().to_string();
+    let content = body.get(loc_col..).unwrap_or("").trim().to_string();
+    (key, content)
+}
+
+/// Fold a wrapped `FT` continuation line into the feature under construction.
+///
+/// A line beginning `/` opens a new qualifier.  Otherwise it continues the
+/// location (while no qualifier has appeared yet) or the value of the most recent
+/// qualifier.  EMBL wraps `/translation` mid-token, so that one rejoins with no
+/// separator; free-text qualifiers rejoin with a space.
+fn push_ft_continuation(f: &mut IgFeature, content: &str) {
+    if let Some(q) = content.strip_prefix('/') {
+        let (name, value) = match q.split_once('=') {
+            Some((n, v)) => (
+                n.trim().to_string(),
+                v.trim_start().trim_start_matches('"').to_string(),
+            ),
+            None => (q.trim().to_string(), String::new()),
+        };
+        f.qualifiers.push((name, value));
+    } else if let Some((name, value)) = f.qualifiers.last_mut() {
+        if name != "translation" && !value.is_empty() {
+            value.push(' ');
+        }
+        value.push_str(content);
+    } else {
+        f.location.push_str(content);
+    }
+}
+
+/// Drop the closing quote from each qualifier value (the opening one is removed as
+/// the qualifier is parsed).
+fn finish_feature(mut f: IgFeature) -> IgFeature {
+    for (_, v) in f.qualifiers.iter_mut() {
+        if v.ends_with('"') {
+            v.pop();
+        }
+    }
+    f
 }
 
 /// Parse an IG/Repbase family record file into an [`IgFamilyRecord`].
@@ -86,6 +162,12 @@ pub fn read(path: &Path) -> io::Result<IgFamilyRecord> {
     let mut kw_parts: Vec<String> = Vec::new();
     let mut oc_parts: Vec<String> = Vec::new();
     let mut cur_ref: Option<IgReference> = None;
+    let mut cur_feat: Option<IgFeature> = None;
+
+    // Where an FT location/qualifier begins.  The `FH` header is self-describing
+    // ("FH   Key           Location/Qualifiers"), so the column is read from it
+    // rather than assumed; `DEFAULT_LOC_COL` only applies to records with no `FH`.
+    let mut loc_col = DEFAULT_LOC_COL;
 
     // `after_sq` is set by the SQ line; the next bare line is the consensus name.
     let mut after_sq = false;
@@ -112,7 +194,31 @@ pub fn read(path: &Path) -> io::Result<IgFamilyRecord> {
             let content = body[2..].trim();
 
             match tag {
-                "XX" | "FH" => {} // separators / fixed header
+                "XX" => {} // separator
+                "FH" => {
+                    // "FH   Key           Location/Qualifiers" names its own columns.
+                    if let Some(i) = body.find("Location") {
+                        loc_col = i;
+                    }
+                }
+                "FT" => {
+                    let (key, content) = split_ft_line(body, loc_col);
+                    if key.is_empty() {
+                        // Continuation of the feature already under construction.
+                        if let Some(f) = cur_feat.as_mut() {
+                            push_ft_continuation(f, &content);
+                        }
+                    } else {
+                        if let Some(f) = cur_feat.take() {
+                            rec.features.push(finish_feature(f));
+                        }
+                        cur_feat = Some(IgFeature {
+                            key,
+                            location: content,
+                            qualifiers: Vec::new(),
+                        });
+                    }
+                }
                 "ID" => {
                     rec.id_line = content.to_string();
                     rec.id = content
@@ -159,6 +265,9 @@ pub fn read(path: &Path) -> io::Result<IgFamilyRecord> {
 
     if let Some(r) = cur_ref.take() {
         rec.references.push(r);
+    }
+    if let Some(f) = cur_feat.take() {
+        rec.features.push(finish_feature(f));
     }
 
     rec.description = join_nonempty(&de_parts, " ");
@@ -317,5 +426,111 @@ ACGT
         assert_eq!(r.references[0].authors.as_deref(), Some("Author A"));
         assert_eq!(r.references[1].number.as_deref(), Some("[2]"));
         assert_eq!(r.references[1].title.as_deref(), Some("Second title"));
+    }
+
+    #[test]
+    fn no_feature_table_yields_no_features() {
+        // Most Repbase families are nonautonomous: an FH header, no FT lines.
+        let body = "\
+;ID   X DNA
+;FH   Key           Location/Qualifiers
+;SQ   Sequence 4 BP;
+X
+ACGT
+";
+        assert!(parse(body, "ig_fam_nofeat.ig").features.is_empty());
+    }
+
+    #[test]
+    fn feature_table_parses_location_and_qualifiers() {
+        // Columns matter: key at 5, location/qualifier at 19 (after the ';').
+        let body = "\
+;ID   X DNA
+;FH   Key           Location/Qualifiers
+;FT   CDS           490..4569
+;FT                 /product=\"X_1p\"
+;FT                 /pseudo
+;SQ   Sequence 4 BP;
+X
+ACGT
+";
+        let r = parse(body, "ig_fam_feat.ig");
+        assert_eq!(r.features.len(), 1);
+        let f = &r.features[0];
+        assert_eq!(f.key, "CDS");
+        assert_eq!(f.location, "490..4569");
+        assert_eq!(
+            f.qualifiers,
+            vec![
+                ("product".to_string(), "X_1p".to_string()),
+                ("pseudo".to_string(), String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn wrapped_location_and_qualifiers_rejoin_correctly() {
+        // A wrapped location concatenates; free text rejoins with a space;
+        // /translation rejoins with none (EMBL wraps it mid-token).
+        let body = "\
+;ID   X DNA
+;FH   Key           Location/Qualifiers
+;FT   CDS           join(312..602,1346..2053,
+;FT                 2317..2817)
+;FT                 /note=\"SAP domain, zinc finger,
+;FT                 reverse transcriptase.\"
+;FT                 /translation=\"MEVTDKVAELVESFTRTGLVKKCEAKNLSTSGTKEEL
+;FT                 AARLANLSESEERGAEQ\"
+;SQ   Sequence 4 BP;
+X
+ACGT
+";
+        let f = &parse(body, "ig_fam_wrap.ig").features[0];
+        assert_eq!(f.location, "join(312..602,1346..2053,2317..2817)");
+        assert_eq!(f.qualifiers[0].1, "SAP domain, zinc finger, reverse transcriptase.");
+        assert_eq!(
+            f.qualifiers[1].1,
+            "MEVTDKVAELVESFTRTGLVKKCEAKNLSTSGTKEELAARLANLSESEERGAEQ"
+        );
+    }
+
+    #[test]
+    fn multiple_features_are_kept_separate() {
+        let body = "\
+;ID   X DNA
+;FH   Key           Location/Qualifiers
+;FT   CDS           265..1518
+;FT                 /product=\"orf1\"
+;FT   CDS           2314..5043
+;FT                 /product=\"orf2\"
+;SQ   Sequence 4 BP;
+X
+ACGT
+";
+        let r = parse(body, "ig_fam_two.ig");
+        assert_eq!(r.features.len(), 2);
+        assert_eq!(r.features[0].location, "265..1518");
+        assert_eq!(r.features[0].qualifiers[0].1, "orf1");
+        assert_eq!(r.features[1].location, "2314..5043");
+        assert_eq!(r.features[1].qualifiers[0].1, "orf2");
+    }
+
+    #[test]
+    fn location_column_is_taken_from_the_fh_header() {
+        // If Repbase ever shifts the layout, FH names the new column and the
+        // parser follows it rather than mis-slicing at the default of 19.
+        let body = "\
+;ID   X DNA
+;FH   Key   Location/Qualifiers
+;FT   CDS   490..4569
+;FT         /product=\"X_1p\"
+;SQ   Sequence 4 BP;
+X
+ACGT
+";
+        let f = &parse(body, "ig_fam_shift.ig").features[0];
+        assert_eq!(f.key, "CDS");
+        assert_eq!(f.location, "490..4569");
+        assert_eq!(f.qualifiers[0].1, "X_1p");
     }
 }

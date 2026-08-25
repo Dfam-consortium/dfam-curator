@@ -5,7 +5,8 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 
-use crate::alignment::{Orientation, SequenceRow, MultiAlign};
+use aln_core::msa::{SequenceRow, MultiAlign};
+use aln_core::Strand;
 
 /// Read an aligned FASTA / A2M file into a MultiAlign.
 ///
@@ -48,7 +49,8 @@ pub fn read(path: &Path) -> io::Result<MultiAlign> {
         .map(|(name, seq)| make_instance_row(name, seq))
         .collect();
 
-    Ok(MultiAlign::from_sequences(reference, instances))
+    MultiAlign::from_sequences(reference, instances)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
 /// Write a MultiAlign as aligned FASTA (A2M).
@@ -116,7 +118,7 @@ fn make_instance_row(orig_name: String, seq: Vec<u8>) -> SequenceRow {
     row
 }
 
-fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
+fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Strand) {
     if let Some(colon) = name.rfind(':') {
         let prefix = &name[..colon];
         let coords = &name[colon + 1..];
@@ -127,32 +129,32 @@ fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
                 .trim_end_matches('_');
             if let (Ok(a), Ok(b)) = (s.parse::<u64>(), e.parse::<u64>()) {
                 let orient = if e_raw.ends_with("_-") {
-                    Orientation::Reverse
+                    Strand::Minus
                 } else if e_raw.ends_with("_+") {
-                    Orientation::Forward
+                    Strand::Plus
                 } else if a > b {
-                    Orientation::Reverse
+                    Strand::Minus
                 } else {
-                    Orientation::Forward
+                    Strand::Plus
                 };
                 let (seq_start, seq_end) = if a <= b { (a, b) } else { (b, a) };
                 return (prefix.to_string(), seq_start, seq_end, orient);
             }
         }
     }
-    (name.to_string(), 0, 0, Orientation::Forward)
+    (name.to_string(), 0, 0, Strand::Plus)
 }
 
 /// Build the FASTA label matching Perl's toFASTA id convention:
 /// forward → `name:seq_start-seq_end`; reverse → `name:seq_end-seq_start`.
 /// Falls back to bare `name` when coordinates are both zero.
-fn seq_label(name: &str, seq_start: u64, seq_end: u64, orient: Orientation) -> String {
+fn seq_label(name: &str, seq_start: u64, seq_end: u64, orient: Strand) -> String {
     if seq_start == 0 && seq_end == 0 {
         return name.to_string();
     }
     match orient {
-        Orientation::Forward => format!("{}:{}-{}", name, seq_start, seq_end),
-        Orientation::Reverse => format!("{}:{}-{}", name, seq_end, seq_start),
+        Strand::Plus => format!("{}:{}-{}", name, seq_start, seq_end),
+        Strand::Minus => format!("{}:{}-{}", name, seq_end, seq_start),
     }
 }
 
@@ -169,7 +171,7 @@ mod tests {
     fn write_basic() {
         let ref_seq = SequenceRow::new("ref", b"AC-GT".to_vec());
         let inst = SequenceRow::new("s1", b"AC-GT".to_vec());
-        let msa = MultiAlign::from_sequences(ref_seq, vec![inst]);
+        let msa = MultiAlign::from_sequences(ref_seq, vec![inst]).expect("fixture rows are equal width");
         let out = roundtrip(&msa);
         let s = String::from_utf8(out).unwrap();
         // Reference is excluded from MSA output (Perl toFASTA behaviour).

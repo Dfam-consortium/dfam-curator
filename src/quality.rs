@@ -8,8 +8,8 @@
 /// 2. Negate the scores so low-quality regions become high-scoring targets.
 /// 3. Apply Ruzzo-Tompa to find all maximal-scoring contiguous windows.
 /// 4. Return the resulting ranges as low-quality blocks.
-use crate::alignment::MultiAlign;
-use crate::matrix::{ALPHA_LEN, MATRIX};
+use aln_core::msa::MultiAlign;
+use aln_core::consensus::{ALPHA_LEN, MATRIX};
 
 /// A contiguous range of alignment columns identified as low-quality.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,13 +27,13 @@ pub struct LowQualityBlock {
 /// For each column the quality score is the best-fitting IUPAC consensus score,
 /// summed over all observed bases in that column.  Higher = better aligned.
 pub fn column_scores(msa: &MultiAlign) -> Vec<i64> {
-    msa.build_profile(false)
+    msa.build_profile(aln_core::consensus::ALPHA_LEN, aln_core::consensus::alpha_idx, false)
         .iter()
         .map(|col| best_column_score(col))
         .collect()
 }
 
-fn best_column_score(col: &[u32; ALPHA_LEN]) -> i64 {
+fn best_column_score(col: &[u32]) -> i64 {
     let mut best: i64 = i64::MIN;
     for cand in 0..ALPHA_LEN {
         let mut score: i64 = 0;

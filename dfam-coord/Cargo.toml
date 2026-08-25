@@ -10,9 +10,11 @@ name = "dfam_coord"
 path = "src/lib.rs"
 
 [dependencies]
-#smitten = { git = "https://github.com/Dfam-consortium/Smitten.git", tag = "v1.0.0-alpha" }
-smitten = { git = "https://github.com/Dfam-consortium/Smitten.git" }
-dfam-stk-io = { path = "../dfam-stk-io" }
+# Pinned to the same tag as the rest of the workspace. Untagged, this floated
+# on the default branch and resolved to a different commit than the workspace
+# pin, so two copies of smitten were compiled into every build.
+smitten = { git = "https://github.com/Dfam-consortium/Smitten.git", tag = "1.0.2" }
+dfam-stk-io = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 regex = "1.11.1"
 flate2 = "1.0"

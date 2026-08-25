@@ -11,7 +11,8 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 
-use crate::alignment::{MultiAlign, Orientation, SequenceRow};
+use aln_core::msa::{MultiAlign, SequenceRow};
+use aln_core::Strand;
 
 const BLOCK_WIDTH: usize = 60;
 
@@ -98,7 +99,8 @@ pub fn read(path: &Path) -> io::Result<MultiAlign> {
         })
         .collect();
 
-    Ok(MultiAlign::from_sequences(reference, instances))
+    MultiAlign::from_sequences(reference, instances)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
 /// Write a `MultiAlign` as a Clustal ALN file.
@@ -166,7 +168,7 @@ fn make_instance_row(orig_name: String, seq: Vec<u8>) -> SequenceRow {
     row
 }
 
-fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
+fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Strand) {
     if let Some(colon) = name.rfind(':') {
         let prefix = &name[..colon];
         let coords = &name[colon + 1..];
@@ -177,20 +179,20 @@ fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Orientation) {
                 .trim_end_matches('_');
             if let (Ok(a), Ok(b)) = (s.parse::<u64>(), e.parse::<u64>()) {
                 let orient = if e_raw.ends_with("_-") {
-                    Orientation::Reverse
+                    Strand::Minus
                 } else if e_raw.ends_with("_+") {
-                    Orientation::Forward
+                    Strand::Plus
                 } else if a > b {
-                    Orientation::Reverse
+                    Strand::Minus
                 } else {
-                    Orientation::Forward
+                    Strand::Plus
                 };
                 let (seq_start, seq_end) = if a <= b { (a, b) } else { (b, a) };
                 return (prefix.to_string(), seq_start, seq_end, orient);
             }
         }
     }
-    (name.to_string(), 0, 0, Orientation::Forward)
+    (name.to_string(), 0, 0, Strand::Plus)
 }
 
 fn seq_label(s: &SequenceRow) -> String {
@@ -198,8 +200,8 @@ fn seq_label(s: &SequenceRow) -> String {
         return s.name.clone();
     }
     match s.orient {
-        Orientation::Forward => format!("{}:{}-{}", s.name, s.seq_start, s.seq_end),
-        Orientation::Reverse => format!("{}:{}-{}", s.name, s.seq_end, s.seq_start),
+        Strand::Plus => format!("{}:{}-{}", s.name, s.seq_start, s.seq_end),
+        Strand::Minus => format!("{}:{}-{}", s.name, s.seq_end, s.seq_start),
     }
 }
 
@@ -211,7 +213,7 @@ mod tests {
         let ref_seq = SequenceRow::new("consensus", b"ACGT-ACGT".to_vec());
         let inst1 = SequenceRow::new("seq1", b"ACGT-ACGT".to_vec());
         let inst2 = SequenceRow::new("seq2", b"ACGT-TTTT".to_vec());
-        MultiAlign::from_sequences(ref_seq, vec![inst1, inst2])
+        MultiAlign::from_sequences(ref_seq, vec![inst1, inst2]).expect("fixture rows are equal width")
     }
 
     #[test]

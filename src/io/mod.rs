@@ -7,7 +7,7 @@ pub mod linup_fmt;
 pub mod stockholm;
 pub mod twobit;
 
-use crate::alignment::MultiAlign;
+use aln_core::msa::MultiAlign;
 use crate::build::Reference;
 use std::io;
 use std::path::Path;

@@ -18,6 +18,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "aln-core"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "aln-engine"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+dependencies = [
+ "aln-core",
+ "rayon",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "aln-parasail"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+ "cc",
+]
+
+[[package]]
+name = "aln-reference"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+]
+
+[[package]]
+name = "aln-rmblast"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+ "anyhow",
+ "rayon",
+ "rmblast-lib",
+]
+
+[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -102,6 +151,19 @@ name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
+
+[[package]]
+name = "autocons"
+version = "0.1.0"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+ "aln-parasail",
+ "anyhow",
+ "clap",
+ "cons-core",
+ "rayon",
+]
 
 [[package]]
 name = "base64"
@@ -273,6 +335,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
+name = "cons-core"
+version = "0.1.0"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+ "aln-parasail",
+ "aln-reference",
+ "aln-rmblast",
+ "rayon",
+]
+
+[[package]]
 name = "console"
 version = "0.15.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -378,6 +452,7 @@ dependencies = [
 name = "dfam-curator"
 version = "0.6.1"
 dependencies = [
+ "aln-core",
  "anyhow",
  "clap",
  "dfam-coord",
@@ -394,7 +469,9 @@ dependencies = [
 [[package]]
 name = "dfam-stk-io"
 version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
 dependencies = [
+ "aln-core",
  "smitten",
 ]
 
@@ -1126,6 +1203,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "ram-core"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/RepeatAfterMe?tag=RepeatAfterMe_V0.1.0#ba89cb1b18d5fc8ef6af0cef16b567986880305e"
+dependencies = [
+ "aln-core",
+ "rayon",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,6 +1329,26 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rmblast-lib"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.5#aee53a91128b638be0b52c8c2ca6debc2da560ce"
+dependencies = [
+ "anyhow",
+ "memmap2",
+ "rayon",
+ "rmstats",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "rmstats"
+version = "0.1.0"
+source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.5#aee53a91128b638be0b52c8c2ca6debc2da560ce"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -1408,7 +1514,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 [[package]]
 name = "smitten"
 version = "0.1.1"
-source = "git+https://github.com/Dfam-consortium/Smitten.git#2bd6be1942e5ac3ef39bd8427aae4be7590f95ea"
+source = "git+https://github.com/Dfam-consortium/Smitten.git?tag=1.0.2#8036a75a1b30947b056d956afa2291ec4bbd977a"
 dependencies = [
  "regex",
 ]
@@ -1506,6 +1612,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "te-composer"
+version = "0.1.0"
+dependencies = [
+ "aln-core",
+ "aln-engine",
+ "aln-parasail",
+ "aln-reference",
+ "aln-rmblast",
+ "anyhow",
+ "clap",
+ "cons-core",
+ "dfam-stk-io",
+ "ram-core",
+ "rayon",
+ "smitten",
 ]
 
 [[package]]

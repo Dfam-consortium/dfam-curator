@@ -22,7 +22,8 @@
 ///    gap pattern is wider than that instance's gap pattern).
 ///
 /// The result is a `MultiAlign` where every row has the same width.
-use crate::alignment::{MultiAlign, Orientation, SequenceRow};
+use aln_core::msa::{MultiAlign, SequenceRow};
+use aln_core::Strand;
 use crate::io::crossmatch::PairwiseHit;
 
 /// Which side of each `PairwiseHit` is the shared reference.
@@ -112,7 +113,7 @@ pub fn build_from_pairwise(
         let orient = if ref_side == Reference::Subject {
             hit.orientation
         } else {
-            Orientation::Forward
+            Strand::Plus
         };
 
         let ref_start_offset = ref_start(hit, ref_side) as usize - ref_min;
@@ -188,7 +189,8 @@ pub fn build_from_pairwise(
     let ref_name = ref_name(hits.first().unwrap(), ref_side).to_string();
     let mut ref_row = SequenceRow::new(ref_name, gapped_ref);
     ref_row.seq_start = ref_min as u64;
-    Ok(MultiAlign::from_sequences(ref_row, instance_rows))
+    MultiAlign::from_sequences(ref_row, instance_rows)
+        .map_err(|e| BuildError::RaggedRows(e.to_string()))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -199,6 +201,9 @@ pub enum BuildError {
     CoverageGap(usize),
     #[error("reference sequence length mismatch")]
     RefLenMismatch,
+    /// The assembled rows were not all the alignment's width.
+    #[error("rows are not all the same width: {0}")]
+    RaggedRows(String),
 }
 
 // ── Reference reconstruction ──────────────────────────────────────────────────
@@ -352,7 +357,7 @@ fn inst_name<'a>(hit: &'a PairwiseHit, side: Reference) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alignment::Orientation;
+    use aln_core::Strand;
     use crate::io::crossmatch::PairwiseHit;
 
     fn make_hit(
@@ -374,7 +379,7 @@ mod tests {
             subj_end,
             subj_remaining: 0,
             subj_seq: subj_seq.to_vec(),
-            orientation: Orientation::Forward,
+            orientation: Strand::Plus,
             id: None,
         }
     }

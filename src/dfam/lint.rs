@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::consensus::{build_consensus_from_sequences, ConsensusParams};
+use aln_core::consensus::{build_consensus_from_sequences, ConsensusParams};
 use crate::dfam::cache::Cache;
 use crate::dfam::record::RawDfamRecord;
 use dfam_stk_io::{is_gap, IDVersion, DFAM_GAP};
@@ -30,7 +30,7 @@ const KNOWN_GC_TAGS: &[&str] = &["RF", "MM"];
 /// All recognised `#=GF` tags (for unknown-tag detection).
 const KNOWN_GF_TAGS: &[&str] = &[
     "AC", "ID", "DE", "AU", "SE", "TP", "OC", "SQ",
-    "TD", "CT", "RN", "RT", "RA", "RM", "RL", "RD", "DR", "CC", "**", "KD", "BM",
+    "TD", "CT", "RN", "RT", "RA", "RM", "RL", "RD", "DR", "CC", "**", "KD", "BM", "FT",
 ];
 
 // ── Consensus type (`#=GF CT`) ────────────────────────────────────────────────
@@ -141,6 +141,7 @@ pub fn lint_record(record: &RawDfamRecord, cache: Option<&Cache>) -> Vec<Diagnos
     check_tp(record, &mut d);
     check_td(record, &mut d);
     check_ct(record, &mut d);
+    check_ft(record, &mut d);
     check_kd(record, &mut d);
     check_ref_blocks(record, &mut d);
     check_block_format(record, &mut d);
@@ -849,6 +850,180 @@ fn check_td(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                 "td_invalid_chars",
                 format!("TD contains invalid character {:?} (only IUB codes allowed)", bad),
             ));
+        }
+    }
+}
+
+// ── Feature table (`#=GF FT`) ─────────────────────────────────────────────────
+
+/// One segment of a `#=GF FT` location.
+///
+/// Repbase writes the minus strand as *descending* coordinates (`5133..5095`)
+/// rather than EMBL's `complement()`, so `start > end` means minus strand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FtSegment {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl FtSegment {
+    /// `true` when the segment reads on the minus strand (written descending).
+    pub fn is_minus(&self) -> bool {
+        self.start > self.end
+    }
+    /// Length in nucleotides.
+    pub fn len_nt(&self) -> usize {
+        self.start.abs_diff(self.end) + 1
+    }
+    /// Highest coordinate the segment touches.
+    pub fn hi(&self) -> usize {
+        self.start.max(self.end)
+    }
+}
+
+/// Parse a feature location: `a..b`, a bare `a`, or `join(a..b,c..d,…)`.
+///
+/// Returns `None` for anything outside the grammar Repbase actually writes.  A
+/// survey of all 67,085 CDS features in RepBase31.06 found no `complement()` and
+/// no `<`/`>` partial markers, so those are rejected rather than supported — if
+/// they ever appear, the location is reported instead of being silently misread.
+pub fn parse_ft_location(loc: &str) -> Option<Vec<FtSegment>> {
+    let l = loc.trim();
+    let inner = match l.strip_prefix("join(").and_then(|s| s.strip_suffix(')')) {
+        Some(inner) => inner,
+        // `complement(...)`, `<1..99`, `1..>99` — outside Repbase's grammar.
+        None if l.contains(['(', '<', '>']) => return None,
+        None => l,
+    };
+
+    let mut segs = Vec::new();
+    for part in inner.split(',') {
+        let p = part.trim();
+        let seg = match p.split_once("..") {
+            Some((a, b)) => FtSegment {
+                start: a.trim().parse().ok()?,
+                end: b.trim().parse().ok()?,
+            },
+            None => {
+                let n: usize = p.parse().ok()?;
+                FtSegment { start: n, end: n }
+            }
+        };
+        if seg.start == 0 || seg.end == 0 {
+            return None; // Repbase emits a literal `0..0` on a few broken records
+        }
+        segs.push(seg);
+    }
+    (!segs.is_empty()).then_some(segs)
+}
+
+/// Shorten a value for inclusion in a diagnostic message.
+fn ellipsize(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max).collect();
+    format!("{}…", head)
+}
+
+/// Validate the optional `#=GF FT` feature table.
+///
+/// A feature is a key + location line (`CDS 490..4569`) followed by zero or more
+/// qualifier lines (`/product="…"`).  The leading `/` is the only thing separating
+/// the two: the Stockholm reader trims `#=GF` values, so EMBL's blank-key-column
+/// convention cannot survive a round trip and qualifier values are never wrapped.
+fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
+    let lines = r.gf_all("FT");
+    if lines.is_empty() {
+        return;
+    }
+
+    // Coordinates are in ungapped `#=GC RF` space.  Skip the bounds check on a
+    // block-format record, whose RF is a misparse artefact (see `lint_record`).
+    let rf_len = if r.block_separator_line.is_none() {
+        r.gc
+            .get("RF")
+            .map(|rf| rf.bytes().filter(|b| !is_gap(*b)).count())
+    } else {
+        None
+    };
+
+    let mut seen_feature = false;
+    for line in lines {
+        let value = line.trim();
+
+        if value.is_empty() {
+            d.push(err("empty_field", "FT line is present but empty"));
+            continue;
+        }
+
+        // Qualifier line.
+        if value.starts_with('/') {
+            if !seen_feature {
+                d.push(err(
+                    "ft_orphan_qualifier",
+                    format!(
+                        "FT qualifier {:?} has no feature to attach to \
+                         (a key + location line must come first)",
+                        ellipsize(value, 40)
+                    ),
+                ));
+            }
+            continue;
+        }
+
+        // Feature key + location line.
+        seen_feature = true;
+        let Some((key, loc)) = value.split_once(char::is_whitespace) else {
+            d.push(err(
+                "ft_no_location",
+                format!("FT feature {:?} has no location", value),
+            ));
+            continue;
+        };
+
+        let Some(segs) = parse_ft_location(loc) else {
+            d.push(err(
+                "ft_location_invalid",
+                format!(
+                    "FT {} location {:?} is not a valid location \
+                     (expected `a..b` or `join(a..b,…)`; descending coordinates mean minus strand)",
+                    key,
+                    ellipsize(loc.trim(), 60)
+                ),
+            ));
+            continue;
+        };
+
+        if let Some(rf_len) = rf_len {
+            if let Some(bad) = segs.iter().find(|s| s.hi() > rf_len) {
+                d.push(err(
+                    "ft_coord_out_of_range",
+                    format!(
+                        "FT {} location {:?} reaches position {} but the ungapped RF consensus is only {} bp",
+                        key,
+                        ellipsize(loc.trim(), 60),
+                        bad.hi(),
+                        rf_len
+                    ),
+                ));
+                continue;
+            }
+        }
+
+        // A CDS whose span is not a whole number of codons cannot be translated.
+        if key.eq_ignore_ascii_case("CDS") {
+            let span: usize = segs.iter().map(|s| s.len_nt()).sum();
+            if span % 3 != 0 {
+                d.push(warn(
+                    "ft_cds_span_not_codons",
+                    format!(
+                        "FT CDS location {:?} spans {} bp, which is not a multiple of 3",
+                        ellipsize(loc.trim(), 60),
+                        span
+                    ),
+                ));
+            }
         }
     }
 }
@@ -2454,5 +2629,87 @@ s1          ACGT\n\
         );
         let diags = lint_record(&r, None);
         assert!(!has_check(&diags, "ref_block_order"), "{:?}", diags);
+    }
+
+    // ── #=GF FT ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn ft_location_grammar() {
+        // Simple span, join, and Repbase's descending = minus strand.
+        assert_eq!(
+            parse_ft_location("490..4569"),
+            Some(vec![FtSegment { start: 490, end: 4569 }])
+        );
+        let j = parse_ft_location("join(312..602,1346..2053)").unwrap();
+        assert_eq!(j.len(), 2);
+        assert_eq!(j[1], FtSegment { start: 1346, end: 2053 });
+
+        let m = parse_ft_location("join(5133..5095,4587..4357)").unwrap();
+        assert!(m[0].is_minus(), "descending coordinates are the minus strand");
+        assert_eq!(m[0].len_nt(), 39);
+        assert_eq!(m[0].hi(), 5133);
+
+        // Forms Repbase never writes are rejected rather than misread.
+        assert_eq!(parse_ft_location("complement(1..99)"), None);
+        assert_eq!(parse_ft_location("<1..99"), None);
+        assert_eq!(parse_ft_location("1..>99"), None);
+        assert_eq!(parse_ft_location("0..0"), None);
+        assert_eq!(parse_ft_location("garbage"), None);
+    }
+
+    fn ft_record(ft: &[&str], rf: &str) -> RawDfamRecord {
+        let mut gf: Vec<(&str, &str)> = vec![
+            ("ID", "X"), ("DE", "d"), ("AU", "a"), ("TP", "t"), ("OC", "o"), ("SQ", "0"),
+        ];
+        gf.extend(ft.iter().map(|f| ("FT", *f)));
+        make_record(&gf, Some(rf), &[])
+    }
+
+    #[test]
+    fn ft_clean_feature_is_silent() {
+        let r = ft_record(
+            &["CDS 4..9", "/product=\"X_1p\"", "/note=\"free text\""],
+            "ACGTACGTAC",
+        );
+        let d = lint_record(&r, None);
+        assert!(!d.iter().any(|x| x.check.starts_with("ft_")), "{:?}", d);
+    }
+
+    #[test]
+    fn ft_qualifier_without_a_feature_is_an_error() {
+        let r = ft_record(&["/product=\"orphan\""], "ACGTACGTAC");
+        assert!(has_check(&lint_record(&r, None), "ft_orphan_qualifier"));
+    }
+
+    #[test]
+    fn ft_unparsable_location_is_reported() {
+        let r = ft_record(&["CDS complement(1..9)"], "ACGTACGTAC");
+        assert!(has_check(&lint_record(&r, None), "ft_location_invalid"));
+    }
+
+    #[test]
+    fn ft_coord_past_end_of_rf_is_an_error() {
+        // RF is 10 ungapped columns; the CDS reaches 99.
+        let r = ft_record(&["CDS 4..99"], "ACGTACGTAC");
+        assert!(has_check(&lint_record(&r, None), "ft_coord_out_of_range"));
+    }
+
+    #[test]
+    fn ft_coords_are_ungapped_rf_space() {
+        // 10 ungapped bases spread over 14 columns: 4..9 is in range, not past the end.
+        let r = ft_record(&["CDS 4..9"], "ACGT..ACG..TAC");
+        assert!(!has_check(&lint_record(&r, None), "ft_coord_out_of_range"));
+    }
+
+    #[test]
+    fn ft_cds_span_not_a_multiple_of_three_warns() {
+        let r = ft_record(&["CDS 1..8"], "ACGTACGTAC");
+        assert!(has_check(&lint_record(&r, None), "ft_cds_span_not_codons"));
+    }
+
+    #[test]
+    fn ft_is_a_known_tag() {
+        let r = ft_record(&["CDS 4..9"], "ACGTACGTAC");
+        assert!(!has_check(&lint_record(&r, None), "unknown_gf_tag"));
     }
 }
