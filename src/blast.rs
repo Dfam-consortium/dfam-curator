@@ -12,6 +12,7 @@ use anyhow::{bail, Context};
 
 use aln_core::msa::{MultiAlign, SequenceRow};
 use aln_core::Strand;
+use aln_coord::Span;
 
 // ── Search parameters ─────────────────────────────────────────────────────────
 
@@ -63,18 +64,16 @@ pub struct BlastHit {
     pub score: u32,
     /// Query sequence name.
     pub query_name: String,
-    /// Query start (1-based, closed).
-    pub query_start: u64,
-    /// Query end (1-based, closed).
-    pub query_end: u64,
+    /// Query extent. BLAST tabular writes it 1-based closed; this is the
+    /// same bases in the house convention.
+    pub query: Span,
     /// Total query sequence length.
     pub query_len: u64,
     /// Subject sequence name.
     pub subj_name: String,
-    /// Subject start (1-based; always <= subj_end in BLAST tabular output).
-    pub subj_start: u64,
-    /// Subject end (1-based).
-    pub subj_end: u64,
+    /// Subject extent, forward strand (BLAST tabular keeps `sstart <= send`
+    /// and reports strand separately).
+    pub subj: Span,
     /// Total subject sequence length.
     pub subj_len: u64,
     /// Forward = plus strand of subject; Reverse = minus strand.
@@ -185,11 +184,15 @@ fn parse_hits(text: &str) -> anyhow::Result<Vec<BlastHit>> {
         let query_name       = f[1].to_string();
         let query_start: u64 = f[2].parse().context("qstart")?;
         let query_end: u64   = f[3].parse().context("qend")?;
+        let query = Span::from_1b_closed(query_start, query_end)
+            .with_context(|| format!("query coordinates in {line:?}"))?;
         let query_len: u64   = f[4].parse().context("qlen")?;
         let orientation      = if f[5] == "minus" { Strand::Minus } else { Strand::Plus };
         let subj_name        = f[6].to_string();
         let subj_start: u64  = f[7].parse().context("sstart")?;
         let subj_end: u64    = f[8].parse().context("send")?;
+        let subj = Span::from_1b_closed(subj_start, subj_end)
+            .with_context(|| format!("subject coordinates in {line:?}"))?;
         let subj_len: u64    = f[9].parse().context("slen")?;
         let query_seq        = f[10].as_bytes().to_vec();
         let subj_seq         = f[11].as_bytes().to_vec();
@@ -197,12 +200,10 @@ fn parse_hits(text: &str) -> anyhow::Result<Vec<BlastHit>> {
         hits.push(BlastHit {
             score,
             query_name,
-            query_start,
-            query_end,
+            query,
             query_len,
             subj_name,
-            subj_start,
-            subj_end,
+            subj,
             subj_len,
             orientation,
             query_seq,
@@ -237,7 +238,7 @@ pub fn hits_to_multialign(
         .iter()
         .map(|hit| {
             let mut row = vec![b' '; width];
-            let ref_start = (hit.subj_start as usize).saturating_sub(1); // 0-based
+            let ref_start = hit.subj.start() as usize;
 
             // For a minus-strand hit, BLAST reports:
             //   sseq  = RC of the plus-strand subject (read 5'→3' on the minus strand)
@@ -268,8 +269,7 @@ pub fn hits_to_multialign(
             }
 
             let mut seq_row = SequenceRow::new(hit.query_name.clone(), row);
-            seq_row.seq_start = hit.query_start;
-            seq_row.seq_end   = hit.query_end;
+            seq_row.span      = Some(hit.query);
             seq_row.orient    = hit.orientation;
             seq_row
         })
@@ -318,7 +318,8 @@ mod tests {
         assert_eq!(h.score, 500);
         assert_eq!(h.query_name, "seq1");
         assert_eq!(h.orientation, Strand::Plus);
-        assert_eq!(h.subj_start, 1);
+        assert_eq!(h.query.as_1b_closed(), Some((10, 200)));
+        assert_eq!(h.subj.as_1b_closed(), Some((1, 190)));
         assert_eq!(&h.query_seq, b"ACGT-ACG");
     }
 
@@ -337,9 +338,9 @@ mod tests {
         let hit = BlastHit {
             score: 100,
             query_name: "q1".to_string(),
-            query_start: 1, query_end: 4, query_len: 4,
+            query: Span::from_1b_closed(1, 4).unwrap(), query_len: 4,
             subj_name: "ref".to_string(),
-            subj_start: 1, subj_end: 4, subj_len: 4,
+            subj: Span::from_1b_closed(1, 4).unwrap(), subj_len: 4,
             orientation: Strand::Plus,
             query_seq: b"ACGT".to_vec(),
             subj_seq:  b"ACGT".to_vec(),
@@ -359,9 +360,9 @@ mod tests {
         let hit = BlastHit {
             score: 80,
             query_name: "q1".to_string(),
-            query_start: 1, query_end: 3, query_len: 3,
+            query: Span::from_1b_closed(1, 3).unwrap(), query_len: 3,
             subj_name: "ref".to_string(),
-            subj_start: 3, subj_end: 6, subj_len: 8,
+            subj: Span::from_1b_closed(3, 6).unwrap(), subj_len: 8,
             orientation: Strand::Plus,
             query_seq: b"CG-A".to_vec(),
             subj_seq:  b"CGTA".to_vec(),
@@ -387,9 +388,9 @@ mod tests {
         let hit = BlastHit {
             score: 60,
             query_name: "q1".to_string(),
-            query_start: 1, query_end: 5, query_len: 5,
+            query: Span::from_1b_closed(1, 5).unwrap(), query_len: 5,
             subj_name: "ref".to_string(),
-            subj_start: 1, subj_end: 4, subj_len: 4,
+            subj: Span::from_1b_closed(1, 4).unwrap(), subj_len: 4,
             orientation: Strand::Plus,
             query_seq: b"ACXGT".to_vec(),
             subj_seq:  b"AC-GT".to_vec(),

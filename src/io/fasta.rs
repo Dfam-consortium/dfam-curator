@@ -7,6 +7,7 @@ use std::path::Path;
 
 use aln_core::msa::{SequenceRow, MultiAlign};
 use aln_core::Strand;
+use dfam_stk_io::msa::parse_seq_name_coords;
 
 /// Read an aligned FASTA / A2M file into a MultiAlign.
 ///
@@ -75,7 +76,7 @@ pub fn write(
         writeln!(out)?;
     }
     for seq in &msa.sequences[1..] {
-        writeln!(out, ">{}{}", seq_label(&seq.name, seq.seq_start, seq.seq_end, seq.orient), desc_suffix)?;
+        writeln!(out, ">{}{}", seq_label(seq), desc_suffix)?;
         let s: Vec<u8> = seq.seq.iter().map(|&b| if b == b' ' { b'-' } else { b }).collect();
         out.write_all(&s)?;
         writeln!(out)?;
@@ -102,7 +103,7 @@ pub fn write_ungapped(
             .filter(|&&b| b != b'-' && b != b' ')
             .copied()
             .collect();
-        writeln!(out, ">{}", seq_label(&seq.name, seq.seq_start, seq.seq_end, seq.orient))?;
+        writeln!(out, ">{}", seq_label(seq))?;
         out.write_all(&ungapped)?;
         writeln!(out)?;
     }
@@ -110,51 +111,23 @@ pub fn write_ungapped(
 }
 
 fn make_instance_row(orig_name: String, seq: Vec<u8>) -> SequenceRow {
-    let (name, seq_start, seq_end, orient) = parse_seq_name_coords(&orig_name);
+    let (name, span, orient) = parse_seq_name_coords(&orig_name);
     let mut row = SequenceRow::new(name, seq);
-    row.seq_start = seq_start;
-    row.seq_end = seq_end;
+    row.span = span;
     row.orient = orient;
     row
 }
 
-fn parse_seq_name_coords(name: &str) -> (String, u64, u64, Strand) {
-    if let Some(colon) = name.rfind(':') {
-        let prefix = &name[..colon];
-        let coords = &name[colon + 1..];
-        if let Some(dash) = coords.find('-') {
-            let (s, e_raw) = (&coords[..dash], &coords[dash + 1..]);
-            let e = e_raw
-                .trim_end_matches(|c: char| c == '+' || c == '-')
-                .trim_end_matches('_');
-            if let (Ok(a), Ok(b)) = (s.parse::<u64>(), e.parse::<u64>()) {
-                let orient = if e_raw.ends_with("_-") {
-                    Strand::Minus
-                } else if e_raw.ends_with("_+") {
-                    Strand::Plus
-                } else if a > b {
-                    Strand::Minus
-                } else {
-                    Strand::Plus
-                };
-                let (seq_start, seq_end) = if a <= b { (a, b) } else { (b, a) };
-                return (prefix.to_string(), seq_start, seq_end, orient);
-            }
-        }
-    }
-    (name.to_string(), 0, 0, Strand::Plus)
-}
-
-/// Build the FASTA label matching Perl's toFASTA id convention:
-/// forward → `name:seq_start-seq_end`; reverse → `name:seq_end-seq_start`.
-/// Falls back to bare `name` when coordinates are both zero.
-fn seq_label(name: &str, seq_start: u64, seq_end: u64, orient: Strand) -> String {
-    if seq_start == 0 && seq_end == 0 {
-        return name.to_string();
-    }
-    match orient {
-        Strand::Plus => format!("{}:{}-{}", name, seq_start, seq_end),
-        Strand::Minus => format!("{}:{}-{}", name, seq_end, seq_start),
+/// Build the FASTA label matching Perl's toFASTA id convention, 1-based
+/// closed: forward → `name:start-end`; reverse → `name:end-start`. The bare
+/// name when the row has no coordinates.
+fn seq_label(s: &SequenceRow) -> String {
+    match s.span.and_then(|sp| sp.as_1b_closed()) {
+        None => s.name.clone(),
+        Some((start, end)) => match s.orient {
+            Strand::Plus => format!("{}:{}-{}", s.name, start, end),
+            Strand::Minus => format!("{}:{}-{}", s.name, end, start),
+        },
     }
 }
 

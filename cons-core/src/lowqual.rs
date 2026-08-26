@@ -166,7 +166,7 @@ pub fn column_profile_weighted(
         // columns is charged one open and the rest extends — exactly the
         // Perl's per-sequence `$inGap` flag.
         let mut in_gap = false;
-        for col in row.start..=row.end.min(width.saturating_sub(1)) {
+        for col in row.col_start..row.col_end.min(width) {
             let t = row.seq[col];
             let r = reference.seq[col];
             let t_gap = seqmod::is_gap(t) || t == b' ';
@@ -308,7 +308,7 @@ pub fn low_scoring_columns(
 fn block_sequences(msa: &MultiAlign, start: usize, end: usize) -> (usize, Vec<Vec<u8>>) {
     let mut inst = Vec::new();
     for row in msa.sequences.iter().skip(1) {
-        if start >= row.start && end <= row.end {
+        if start >= row.col_start && end < row.col_end {
             let raw: Vec<u8> = row.seq[start..=end]
                 .iter()
                 .copied()
@@ -689,7 +689,7 @@ pub fn pack_insertion_spans(
             .sequences
             .iter()
             .skip(1)
-            .filter(|r| r.start <= a && r.end >= b)
+            .filter(|r| r.col_start <= a && r.col_end > b)
             .map(|r| {
                 r.seq[a..=b]
                     .iter()
@@ -802,7 +802,7 @@ pub fn gap_run_blocks(
                 .sequences
                 .iter()
                 .skip(1)
-                .filter(|r| r.start <= a && r.end >= b)
+                .filter(|r| r.col_start <= a && r.col_end > b)
                 .collect();
             if spanning.len() < min_spanning {
                 return false;
@@ -1186,7 +1186,7 @@ pub fn length_vote_blocks(msa: &MultiAlign, p: &VoteParams) -> Vec<VoteBlock> {
         for (ri, row) in msa.sequences.iter().enumerate().skip(1) {
             // Only copies that cover the whole window vote; a copy ending
             // inside it has no opinion about the length.
-            if row.start > c0 || row.end < c1 {
+            if row.col_start > c0 || row.col_end <= c1 {
                 continue;
             }
             let len = (prefixes[ri][c1 + 1] - prefixes[ri][c0]) as usize;
@@ -1249,7 +1249,7 @@ pub fn length_vote_blocks(msa: &MultiAlign, p: &VoteParams) -> Vec<VoteBlock> {
             std::collections::HashMap::new();
         let mut spanning = 0usize;
         for (ri, row) in msa.sequences.iter().enumerate().skip(1) {
-            if row.start > col0 || row.end < col1 {
+            if row.col_start > col0 || row.col_end <= col1 {
                 continue;
             }
             let len = (prefixes[ri][col1 + 1] - prefixes[ri][col0]) as usize;
@@ -1311,7 +1311,7 @@ fn vote_span(
     let mut histo: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
     let mut spanning = 0usize;
     for (ri, row) in msa.sequences.iter().enumerate().skip(1) {
-        if row.start > col0 || row.end < col1 {
+        if row.col_start > col0 || row.col_end <= col1 {
             continue;
         }
         let len = (prefixes[ri][col1 + 1] - prefixes[ri][col0]) as usize;

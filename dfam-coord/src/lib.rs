@@ -29,8 +29,11 @@ pub struct SequenceRecord {
     pub original_id: Option<String>,
     pub assembly_id: Option<String>,
     pub sequence_id: String,
-    pub start: Option<u64>,
-    pub end: Option<u64>,
+    /// 1-based fully closed, as written in the identifier. This crate audits
+    /// identifiers in their published form, so it keeps that convention and
+    /// says so in the name.
+    pub start_1b: Option<u64>,
+    pub end_1b: Option<u64>,
     pub orient: Option<char>,
     pub inferred_version: Option<IDVersion>,
     pub sequence: Vec<u8>,
@@ -62,8 +65,8 @@ impl SequenceRecord {
             original_id: Some(row.original_id.clone()),
             assembly_id: row.assembly_id.clone(),
             sequence_id: row.sequence_id.clone().unwrap_or_else(|| row.original_id.clone()),
-            start: row.seq_start,
-            end: row.seq_end,
+            start_1b: row.span.and_then(|sp| sp.as_1b_closed()).map(|(s, _)| s),
+            end_1b: row.span.and_then(|sp| sp.as_1b_closed()).map(|(_, e)| e),
             orient: row.orient,
             inferred_version: row.inferred_version.clone(),
             sequence,
@@ -87,8 +90,8 @@ impl SequenceRecord {
             self.original_id.as_deref().unwrap_or("Unknown"),
             self.assembly_id.as_deref().unwrap_or("None"),
             self.sequence_id,
-            self.start.unwrap_or(0),
-            self.end.unwrap_or(0),
+            self.start_1b.unwrap_or(0),
+            self.end_1b.unwrap_or(0),
             self.orient.unwrap_or('?'),
             self.inferred_version,
             self.validated.as_deref().unwrap_or(""),
@@ -196,8 +199,8 @@ pub fn process_sequences(
         for record in results.iter_mut() {
             if record.assembly_id.is_none()
                 && record.validated.is_some()
-                && record.start.is_some()
-                && record.end.is_some()
+                && record.start_1b.is_some()
+                && record.end_1b.is_some()
                 && record.orient.is_some()
             {
                 record.assembly_id = Some(name.to_string());
@@ -358,8 +361,8 @@ pub fn write_stockholm_output(
 
             let v2_id = record.format_id();
 
-            if record.start.is_some() && record.end.is_some() && record.orient.is_some() {
-                writeln!(writer, "{}:{}-{}_{} {}", v2_id, record.start.unwrap(), record.end.unwrap(),
+            if record.start_1b.is_some() && record.end_1b.is_some() && record.orient.is_some() {
+                writeln!(writer, "{}:{}-{}_{} {}", v2_id, record.start_1b.unwrap(), record.end_1b.unwrap(),
                         record.orient.unwrap(), aligned_seq)?;
             } else {
                 writeln!(writer, "{} {}", v2_id, aligned_seq)?;
@@ -396,8 +399,8 @@ pub fn write_fasta_output(
         let v2_id = record.format_id();
         let empty_string = String::new();
         let metadata_entry = metadata.get(record.metadata_idx).unwrap_or(&empty_string);
-        if record.start.is_some() && record.end.is_some() && record.orient.is_some() {
-            writeln!(writer, ">{}:{}-{}_{} {}", v2_id, record.start.unwrap(), record.end.unwrap(),
+        if record.start_1b.is_some() && record.end_1b.is_some() && record.orient.is_some() {
+            writeln!(writer, ">{}:{}-{}_{} {}", v2_id, record.start_1b.unwrap(), record.end_1b.unwrap(),
                     record.orient.unwrap(), metadata_entry)?;
         } else {
             writeln!(writer, ">{} {}", v2_id, metadata_entry)?;
@@ -444,8 +447,8 @@ pub fn write_delimited_output(
     for record in records {
         let assembly_id = record.assembly_id.clone().unwrap_or_default();
         let sequence_id = record.sequence_id.clone();
-        let start = record.start.map(|v| v.to_string()).unwrap_or_default();
-        let end = record.end.map(|v| v.to_string()).unwrap_or_default();
+        let start = record.start_1b.map(|v| v.to_string()).unwrap_or_default();
+        let end = record.end_1b.map(|v| v.to_string()).unwrap_or_default();
         let orient = record.orient.clone().unwrap_or_default();
         let sequence = String::from_utf8_lossy(&record.sequence);
 
@@ -553,7 +556,7 @@ pub fn validate_sequences(
             None => continue,
         };
 
-        if record.start.is_none() {
+        if record.start_1b.is_none() {
             if genome_sequence == &record.sequence {
                 record.validated = Some("valid".to_string());
                 *fix_counts.entry(record.validated.clone().unwrap()).or_insert(0) += 1;
@@ -561,7 +564,7 @@ pub fn validate_sequences(
             continue;
         }
 
-        let range_length = match (record.end, record.start) {
+        let range_length = match (record.end_1b, record.start_1b) {
             (Some(end), Some(start)) => end - start,
              _ => 0,
         };
@@ -576,11 +579,11 @@ pub fn validate_sequences(
                 );
             }
             validation_str.push_str("_halfopen");
-            record.start = record.start.map(|start| start + 1);
+            record.start_1b = record.start_1b.map(|start| start + 1);
         }
 
-        let start = record.start.unwrap() as usize - 1;
-        let end = record.end.unwrap() as usize;
+        let start = record.start_1b.unwrap() as usize - 1;
+        let end = record.end_1b.unwrap() as usize;
         let fasta_sequence = &record.sequence;
         let rev_complement = reverse_complement(fasta_sequence);
         let mut located = false;
@@ -634,8 +637,8 @@ pub fn validate_sequences(
                             if record.orient == Some('-') { "_orient" } else { "" },
                             if *shift >= 0 { "_plus" } else { "_minus" },
                             shift.abs()));
-                        record.start = Some((shifted_start + 1) as u64);
-                        record.end = Some(shifted_end as u64);
+                        record.start_1b = Some((shifted_start + 1) as u64);
+                        record.end_1b = Some(shifted_end as u64);
                         record.orient = if record.orient == Some('-') { Some('+') } else { Some('+') };
                         located = true;
                         break;
@@ -646,8 +649,8 @@ pub fn validate_sequences(
                             if record.orient == Some('+') { "_orient" } else { "" },
                             if *shift >= 0 { "_plus" } else { "_minus" },
                             shift.abs()));
-                        record.start = Some((shifted_start + 1) as u64);
-                        record.end = Some(shifted_end as u64);
+                        record.start_1b = Some((shifted_start + 1) as u64);
+                        record.end_1b = Some(shifted_end as u64);
                         record.orient = if record.orient == Some('+') { Some('-') } else { Some('-') };
                         located = true;
                         break;
@@ -808,8 +811,8 @@ pub fn boyer_moore_search_with_validation(
                 let b_same = b.2 == original_sequence_id;
                 b_same.cmp(&a_same)
                     .then_with(|| {
-                        let dist_a = record.start.map_or(usize::MAX, |start| (a.0 as isize - start as isize).unsigned_abs());
-                        let dist_b = record.start.map_or(usize::MAX, |start| (b.0 as isize - start as isize).unsigned_abs());
+                        let dist_a = record.start_1b.map_or(usize::MAX, |start| (a.0 as isize - start as isize).unsigned_abs());
+                        let dist_b = record.start_1b.map_or(usize::MAX, |start| (b.0 as isize - start as isize).unsigned_abs());
                         dist_a.cmp(&dist_b)
                     })
                     .then_with(|| a.2.cmp(&b.2))
@@ -831,7 +834,7 @@ pub fn boyer_moore_search_with_validation(
     let mut occupied: std::collections::HashSet<(String, u64, u64, char)> = records
         .iter()
         .filter(|r| r.validated.is_some())
-        .filter_map(|r| match (r.start, r.end, r.orient) {
+        .filter_map(|r| match (r.start_1b, r.end_1b, r.orient) {
             (Some(s), Some(e), Some(o)) => Some((r.sequence_id.clone(), s, e, o)),
             _ => None,
         })
@@ -869,8 +872,8 @@ pub fn boyer_moore_search_with_validation(
                 record.validated = Some("removed_remapped_duplicate".to_string());
             }
             Some(best) => {
-                record.start = Some(best.0 as u64 + 1);
-                record.end = Some((best.0 + pat_len) as u64);
+                record.start_1b = Some(best.0 as u64 + 1);
+                record.end_1b = Some((best.0 + pat_len) as u64);
                 record.orient = Some(best.1);
                 record.sequence_id = best.2.clone();
                 record.assembly_id = remapped_assembly.map(|s| s.to_string());
@@ -973,7 +976,7 @@ fn batch_genome_scan(
     for (bp, &idx) in batch_indices.iter().enumerate() {
         let record = &records[idx];
         let mut hits = std::mem::take(&mut hits_by_pos[bp]);
-        sort_hits_by_proximity(&mut hits, &record.sequence_id, record.start);
+        sort_hits_by_proximity(&mut hits, &record.sequence_id, record.start_1b);
         results.push((idx, hits));
         progress.inc(1);
     }
@@ -1053,7 +1056,7 @@ pub fn aho_corasick_search_with_validation(
                 }
             }
 
-            sort_hits_by_proximity(&mut found_positions, &original_sequence_id, record.start);
+            sort_hits_by_proximity(&mut found_positions, &original_sequence_id, record.start_1b);
             progress.inc(1);
             (idx, found_positions)
         })
@@ -1079,7 +1082,7 @@ pub fn aho_corasick_search_with_validation(
     let mut occupied: std::collections::HashSet<(String, u64, u64, char)> = records
         .iter()
         .filter(|r| r.validated.is_some())
-        .filter_map(|r| match (r.start, r.end, r.orient) {
+        .filter_map(|r| match (r.start_1b, r.end_1b, r.orient) {
             (Some(s), Some(e), Some(o)) => Some((r.sequence_id.clone(), s, e, o)),
             _ => None,
         })
@@ -1117,8 +1120,8 @@ pub fn aho_corasick_search_with_validation(
                 record.validated = Some("removed_remapped_duplicate".to_string());
             }
             Some(best) => {
-                record.start = Some(best.0 as u64 + 1);
-                record.end = Some((best.0 + pat_len) as u64);
+                record.start_1b = Some(best.0 as u64 + 1);
+                record.end_1b = Some((best.0 + pat_len) as u64);
                 record.orient = Some(best.1);
                 record.sequence_id = best.2.clone();
                 record.assembly_id = remapped_assembly.map(|s| s.to_string());
@@ -1373,4 +1376,21 @@ pub fn init_thread_pool(n: usize) {
         .num_threads(n)
         .build_global()
         .expect("Failed to build global thread pool");
+}
+
+#[cfg(test)]
+mod coordinate_tests {
+    use super::*;
+
+    /// `SeqRow` stores a half-open span; this crate audits identifiers in
+    /// their written, 1-based closed form. The round trip must be exact.
+    #[test]
+    fn record_coordinates_are_as_written_in_the_identifier() {
+        let row = SeqRow::from_name_seq("chr1:101-200_+", "ACGT");
+        let rec = SequenceRecord::from_seq_row(&row, "x.stk", 0, 0);
+        assert_eq!((rec.start_1b, rec.end_1b, rec.orient), (Some(101), Some(200), Some('+')));
+
+        let bare = SequenceRecord::from_seq_row(&SeqRow::from_name_seq("consensus", "ACGT"), "x.stk", 0, 0);
+        assert_eq!((bare.start_1b, bare.end_1b), (None, None));
+    }
 }

@@ -17,8 +17,8 @@
 /// ```
 ///
 /// The first record is treated as the consensus (the MSA reference); the rest are
-/// instances.  A `FRAGMENT a -> b` populates the row's `seq_start`/`seq_end` (and
-/// orientation when `a > b`).  These coordinates are taken as-is and are not assumed
+/// instances.  A `FRAGMENT a -> b` populates the row's `span` (and orientation when
+/// `a > b`).  These coordinates are taken as-is and are not assumed
 /// accurate — they are expected to be verified/repaired later by DisCoord.  There is
 /// no `1`/`2` sequence terminator; sequence data runs until the next `;` comment or
 /// end of file.
@@ -27,6 +27,7 @@ use std::path::Path;
 
 use aln_core::msa::{MultiAlign, SequenceRow};
 use aln_core::Strand;
+use aln_coord::Span;
 
 /// Read an IG MSA file into a `MultiAlign` (first record = reference/consensus).
 pub fn read(path: &Path) -> io::Result<MultiAlign> {
@@ -102,16 +103,19 @@ fn parse_fragment(comment: &str) -> Option<(u64, u64)> {
 }
 
 /// Build an instance row, applying FRAGMENT coordinates and orientation.
+///
+/// `FRAGMENT a -> b` is 1-based closed, descending on the minus strand. A
+/// fragment containing a 0 is malformed and leaves the row without
+/// coordinates, the same as a missing FRAGMENT line.
 fn make_instance_row(name: String, seq: Vec<u8>, frag: Option<(u64, u64)>) -> SequenceRow {
     let mut row = SequenceRow::new(name, seq);
     if let Some((a, b)) = frag {
-        let (seq_start, seq_end, orient) = if a <= b {
+        let (lo, hi, orient) = if a <= b {
             (a, b, Strand::Plus)
         } else {
             (b, a, Strand::Minus)
         };
-        row.seq_start = seq_start;
-        row.seq_end = seq_end;
+        row.span = Span::from_1b_closed(lo, hi).ok();
         row.orient = orient;
     }
     row
@@ -160,12 +164,10 @@ CTGGA----TAAT
         let path = write_tmp("ig_msa_frag.ig", SAMPLE);
         let msa = read(&path).unwrap();
         // Forward fragment 1 -> 9.
-        assert_eq!(msa.sequences[1].seq_start, 1);
-        assert_eq!(msa.sequences[1].seq_end, 9);
+        assert_eq!(msa.sequences[1].span, Some(Span::new(0, 9).unwrap()));
         assert_eq!(msa.sequences[1].orient, Strand::Plus);
-        // Reverse fragment 9 -> 1 is normalized to start<=end, orient reverse.
-        assert_eq!(msa.sequences[2].seq_start, 1);
-        assert_eq!(msa.sequences[2].seq_end, 9);
+        // Reverse fragment 9 -> 1 covers the same bases, orient reverse.
+        assert_eq!(msa.sequences[2].span, Some(Span::new(0, 9).unwrap()));
         assert_eq!(msa.sequences[2].orient, Strand::Minus);
     }
 

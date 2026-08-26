@@ -42,6 +42,7 @@ use aln_core::msa::MultiAlign;
 use aln_core::seq::{Sequence, Strand};
 use aln_core::stats::{kimura_divergence, Masking};
 use aln_core::twobit::TwoBitReader;
+use aln_coord::Span;
 use anyhow::{Context, Result};
 use ram_core::alphabet::num_to_char;
 use ram_core::engine::{
@@ -209,9 +210,8 @@ struct Anchor {
     seq_index: usize,
     /// Sequence name within the assembly.
     chrom: String,
-    /// 0-based half-open genomic core range (the aligned extent).
-    start: i64,
-    end: i64,
+    /// Genomic core range (the aligned extent).
+    span: Span,
     minus: bool,
     left_extendable: bool,
     right_extendable: bool,
@@ -223,8 +223,9 @@ struct Anchor {
 
 /// Aligned extent and edge reach of one input sequence across all its rows.
 struct RowSpan {
-    seq_start: u64,
-    seq_end: u64,
+    /// Envelope of the copy's rows on the input sequence. `None` when any of
+    /// its rows carried no coordinates, so the copy cannot be placed.
+    span: Option<Span>,
     orient: Strand,
     reaches_left: bool,
     reaches_right: bool,
@@ -249,13 +250,18 @@ fn row_spans(
         let Some(&idx) = by_name.get(row.name.as_str()) else {
             continue;
         };
-        let reaches_left = row.start <= edge_slop;
-        let reaches_right = row.end + edge_slop + 1 >= width;
-        let span = row.seq_end.saturating_sub(row.seq_start);
+        let reaches_left = row.col_start <= edge_slop;
+        let reaches_right = row.col_end + edge_slop >= width;
+        let span = row.span.map_or(0, |s| s.len());
         out.entry(idx)
             .and_modify(|e| {
-                e.seq_start = e.seq_start.min(row.seq_start);
-                e.seq_end = e.seq_end.max(row.seq_end);
+                e.span = match (e.span, row.span) {
+                    (Some(a), Some(b)) => Some(
+                        Span::new(a.start().min(b.start()), a.end().max(b.end()))
+                            .expect("an envelope of ascending spans is ascending"),
+                    ),
+                    _ => None,
+                };
                 e.reaches_left |= reaches_left;
                 e.reaches_right |= reaches_right;
                 if span > e.best_span {
@@ -264,8 +270,7 @@ fn row_spans(
                 }
             })
             .or_insert(RowSpan {
-                seq_start: row.seq_start,
-                seq_end: row.seq_end,
+                span: row.span,
                 orient: row.orient,
                 reaches_left,
                 reaches_right,
@@ -399,29 +404,27 @@ fn anchor(
     // outward in consensus space, so `-` has to mean "this copy runs the
     // other way", not "this copy is on the genome's minus strand".
     let orient_ch = if span.orient == Strand::Minus { '-' } else { '+' };
-    if span.seq_start < 1 || span.seq_end < span.seq_start {
-        return Err(format!(
-            "aligned extent {}-{} is not a valid range",
-            span.seq_start, span.seq_end
-        ));
-    }
-    if span.seq_end as usize > seq.seq.len() {
+    let Some((start_1b, end_1b)) = span.span.and_then(|s| s.as_1b_closed()) else {
+        return Err("aligned extent is unknown: a row carried no coordinates".to_string());
+    };
+    if end_1b as usize > seq.seq.len() {
         return Err(format!(
             "aligned extent ends at {} but the sequence is {} bp",
-            span.seq_end,
+            end_1b,
             seq.seq.len()
         ));
     }
+    // compose_range works in Smitten's 1-based closed terms on both sides.
     let (c_start, c_end, c_orient) = compose_range(
         (whole.start, whole.end, whole.orientation),
-        (span.seq_start as usize, span.seq_end as usize, orient_ch),
+        (start_1b as usize, end_1b as usize, orient_ch),
     )?;
 
     Ok(Anchor {
         seq_index,
         chrom,
-        start: c_start as i64 - 1,
-        end: c_end as i64,
+        span: Span::from_1b_closed(c_start as u64, c_end as u64)
+            .map_err(|e| format!("composed range {c_start}-{c_end}: {e}"))?,
         minus: c_orient == '-',
         left_extendable: span.reaches_left,
         right_extendable: span.reaches_right,
@@ -530,14 +533,14 @@ pub fn extend(
     anchors.sort_by(|a, b| {
         a.chrom
             .cmp(&b.chrom)
-            .then(a.start.cmp(&b.start))
-            .then(b.end.cmp(&a.end))
+            .then(a.span.start().cmp(&b.span.start()))
+            .then(b.span.end().cmp(&a.span.end()))
     });
     if std::env::var_os("TE_COMPOSER_EXTEND_DEBUG").is_some() {
         for a in &anchors {
             eprintln!(
                 "ANCHOR\t{}\t{}\t{}\t{}\tleft={}\tright={}\tfrom={}",
-                a.chrom, a.start, a.end,
+                a.chrom, a.span.start(), a.span.end(),
                 if a.minus { '-' } else { '+' },
                 a.left_extendable, a.right_extendable, a.source
             );
@@ -547,8 +550,7 @@ pub fn extend(
         .iter()
         .map(|a| RangeRecord {
             name: a.chrom.clone(),
-            start: a.start,
-            end: a.end,
+            span: a.span,
             left_flag: i32::from(a.left_extendable),
             right_flag: i32::from(a.right_extendable),
             minus: a.minus,
@@ -713,8 +715,8 @@ unextended"
             (core.left_extension_len as i64, core.right_extension_len as i64)
         };
         let seq_len = genome.seq_len(&a.chrom).unwrap_or(0) as i64;
-        let start = (a.start - before).max(0);
-        let end = (a.end + after).min(seq_len);
+        let start = (a.span.start() as i64 - before).max(0);
+        let end = (a.span.end() as i64 + after).min(seq_len);
         if start >= end {
             continue;
         }

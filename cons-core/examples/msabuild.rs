@@ -68,8 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             gapped_query: gq,
             gapped_reference: gs,
             ref_start: a.subj_start,
-            seq_start: a.query_start as u64 + 1,
-            seq_end: a.query_end as u64,
+            span: Some(aln_coord::Span::new(a.query_start as u64, a.query_end as u64).unwrap()),
             orient: a.strand,
         })
         .collect();

@@ -150,9 +150,9 @@ impl Genome {
 
 /// Genomic windows around one full-length instance plus its MSA row.
 struct Window {
-    /// genome[lb - max_flank .. lb + max_flank]  (lb = seq_start-1, 0-based)
+    /// genome[lb - max_flank .. lb + max_flank]  (lb = span.start(), 0-based)
     lw: Vec<u8>,
-    /// genome[rb - max_flank .. rb + max_flank]  (rb = seq_end, 0-based exclusive)
+    /// genome[rb - max_flank .. rb + max_flank]  (rb = span.end(), 0-based exclusive)
     rw: Vec<u8>,
     /// Aligned row from the MSA (gap characters preserved).
     seq: Vec<u8>,
@@ -209,12 +209,12 @@ fn main() -> anyhow::Result<()> {
             skipped_partial += 1;
             continue;
         }
-        if inst.seq_start >= inst.seq_end {
+        let Some(span) = inst.span.filter(|s| !s.is_empty()) else {
             skipped_no_coord += 1;
             continue;
-        }
-        let lb = inst.seq_start - 1; // 0-based left boundary (exclusive)
-        let rb = inst.seq_end;       // 0-based right boundary (exclusive)
+        };
+        let lb = span.start(); // 0-based left boundary (exclusive)
+        let rb = span.end();   // 0-based right boundary (exclusive)
 
         if !genome.contains(&inst.name) {
             skipped_no_chrom += 1;
@@ -232,7 +232,8 @@ fn main() -> anyhow::Result<()> {
                     Strand::Plus => '+',
                     Strand::Minus => '-',
                 };
-                let label = format!("{}:{}-{}_{}", inst.name, inst.seq_start, inst.seq_end, orient);
+                let (start, end) = span.as_1b_closed().expect("empty spans were skipped above");
+                let label = format!("{}:{}-{}_{}", inst.name, start, end, orient);
                 windows.push(Window { lw: l, rw: r, seq: inst.seq.clone(), label });
             }
             _ => { skipped_bounds += 1; }

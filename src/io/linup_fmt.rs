@@ -4,8 +4,14 @@
 /// by the Linup footer (Avg Kimura, INFO, Cons length, FASTA consensus).
 use std::io::{self, Write};
 
-use aln_core::msa::MultiAlign;
+use aln_core::msa::{MultiAlign, SequenceRow};
 use aln_core::Strand;
+
+/// A row's source coordinates as the 1-based closed pair linup prints.
+/// `(0, 0)` for a row without coordinates, which is what Perl showed.
+fn one_based(row: &SequenceRow) -> (u64, u64) {
+    row.span.and_then(|s| s.as_1b_closed()).unwrap_or((0, 0))
+}
 
 /// Write the alignment to `out` in Linup pretty-print format.
 ///
@@ -38,10 +44,10 @@ pub fn write(
         max_id_len = max_id_len.max(inst.name.len());
     }
 
-    // The reference start coordinate.  `seq_start` is 1-based, so a value of 0
-    // means "unset" (a consensus-style reference with no source coordinate); such
-    // a reference is numbered from 1, matching the consensus row.
-    let ref_start = ref_row.seq_start.max(1);
+    // Linup numbers positions 1-based, as Perl did. A reference with no
+    // source coordinate (a consensus-style reference) is numbered from 1,
+    // matching the consensus row.
+    let ref_start = one_based(ref_row).0.max(1);
 
     // Widest coordinate across reference, consensus, and all instance start/end.
     let ref_ungapped = count_alpha(&ref_row.seq) as u64;
@@ -49,7 +55,8 @@ pub fn write(
     let cons_ungapped = count_alpha(consensus) as u64;
     let mut max_coord: u64 = ref_start.max(ref_last).max(cons_ungapped);
     for inst in &msa.sequences[1..] {
-        max_coord = max_coord.max(inst.seq_start).max(inst.seq_end);
+        let (s, e) = one_based(inst);
+        max_coord = max_coord.max(s).max(e);
     }
     let max_coord_len = max_coord.to_string().len().max(1);
 
@@ -88,15 +95,12 @@ pub fn write(
     }
 
     // Per-instance coordinate trackers.
-    // Reverse-strand sequences count DOWN from seq_end.
+    // Reverse-strand sequences count DOWN from their end coordinate.
     let mut coord: Vec<u64> = (0..n)
         .map(|i| {
             let inst = &msa.sequences[i + 1];
-            if inst.orient == Strand::Minus {
-                inst.seq_end
-            } else {
-                inst.seq_start
-            }
+            let (start, end) = one_based(inst);
+            if inst.orient == Strand::Minus { end } else { start }
         })
         .collect();
 

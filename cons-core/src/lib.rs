@@ -35,6 +35,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use aln_core::consensus::ConsensusParams;
 use aln_core::msa::{assemble_msa, InsertionPolicy, MsaMember, MultiAlign};
 use aln_core::seq::Strand;
+use aln_coord::Span;
 use aln_core::{giri, seq as seqmod, Alignment, Sequence};
 use aln_engine::{PairwiseAligner, Result};
 use rayon::prelude::*;
@@ -688,8 +689,10 @@ pub fn build_msa(
             gapped_query: gq,
             gapped_reference: gs,
             ref_start: a.subj_start,
-            seq_start: a.query_start as u64 + 1,
-            seq_end: a.query_end as u64,
+            span: Some(
+                Span::new(a.query_start as u64, a.query_end as u64)
+                    .expect("Alignment::validate keeps query_start <= query_end"),
+            ),
             orient: a.strand,
         })
         .collect();

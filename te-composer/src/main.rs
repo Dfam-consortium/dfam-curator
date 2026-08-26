@@ -845,7 +845,9 @@ fn report_core_edges(cli: &Cli, edges: &[ram_core::library::CoreEdge]) {
             "  {:>4} {:<idw$} {:<21} {:<6} {}/{}   {:>11} [{:<24}] {}",
             e.index,
             e.identifier,
-            format!("{}-{}", e.start, e.end),
+            // The C report prints the core 0-based fully closed; kept so
+            // the two tools' output can be compared line for line.
+            format!("{}-{}", e.span.start(), e.span.end() - 1),
             if e.minus { "-" } else { "+" },
             u8::from(e.left_extendable),
             u8::from(e.right_extendable),

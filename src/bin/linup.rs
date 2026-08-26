@@ -401,10 +401,13 @@ fn print_stats(msa: &MultiAlign, consensus: &[u8], out: &mut dyn Write) -> std::
         let is_high = rk >= 90.0;
         if is_high { num_high += 1; }
 
+        // 1-based closed, descending on the minus strand; `0-0` for a row
+        // without coordinates, as before.
+        let (start, end) = inst.span.and_then(|s| s.as_1b_closed()).unwrap_or((0, 0));
         let (coords, prefix) = if inst.orient == Strand::Minus {
-            (format!("{}-{}", inst.seq_end, inst.seq_start), is_high)
+            (format!("{}-{}", end, start), is_high)
         } else {
-            (format!("{}-{}", inst.seq_start, inst.seq_end), is_high)
+            (format!("{}-{}", start, end), is_high)
         };
         let label = if prefix {
             format!("**{}:{}", inst.name, coords)

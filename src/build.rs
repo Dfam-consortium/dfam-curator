@@ -53,7 +53,7 @@ pub fn build_from_pairwise(
     }
 
     // ── Step 1: determine reference span and reconstruct combined reference ───
-    let (ref_min, _ref_max, combined_ref) =
+    let (ref_min, ref_max, combined_ref) =
         reconstruct_reference(hits, ref_side, provided_ref_seq)?;
 
     let ref_len = combined_ref.len(); // ungapped length
@@ -64,12 +64,12 @@ pub fn build_from_pairwise(
     //                     *before* (to the left of) reference position j.
     //
     // Reference position j here is 0-based within the combined reference
-    // (i.e., j == 0 is ref_min).
+    // (i.e., j == 0 is ref_min, itself a 0-based position on the reference).
     let mut gap_patterns: Vec<Vec<usize>> = Vec::with_capacity(hits.len());
 
     for hit in hits {
         let ref_seq_gapped = ref_gapped_seq(hit, ref_side);
-        let ref_start_offset = ref_start(hit, ref_side) as usize - ref_min;
+        let ref_start_offset = ref_span(hit, ref_side).start() as usize - ref_min;
 
         // Compute gap count before each ungapped reference base.
         // split_on_non_gap yields the gap runs between reference bases.
@@ -117,7 +117,7 @@ pub fn build_from_pairwise(
             Strand::Plus
         };
 
-        let ref_start_offset = ref_start(hit, ref_side) as usize - ref_min;
+        let ref_start_offset = ref_span(hit, ref_side).start() as usize - ref_min;
 
         // Gapped column where this instance's aligned region begins.
         // We want the column just before the merged_gaps[ref_start_offset] insertion
@@ -174,12 +174,8 @@ pub fn build_from_pairwise(
             inst_out.push(b' ');
         }
 
-        let inst_start_abs = inst_start(hit, ref_side);
-        let inst_end_abs = inst_end(hit, ref_side);
-
         let mut row = SequenceRow::new(inst_name, inst_out);
-        row.seq_start = inst_start_abs;
-        row.seq_end = inst_end_abs;
+        row.span = Some(inst_span(hit, ref_side));
         row.orient = orient;
         row.div = Some(hit.pct_div);
         row.src_div = Some(hit.pct_div);
@@ -189,7 +185,9 @@ pub fn build_from_pairwise(
     // ── Assemble MultiAlign ───────────────────────────────────────────────────
     let ref_name = ref_name(hits.first().unwrap(), ref_side).to_string();
     let mut ref_row = SequenceRow::new(ref_name, gapped_ref);
-    ref_row.seq_start = ref_min as u64;
+    ref_row.span = Some(
+        Span::new(ref_min as u64, ref_max as u64).expect("ref_min <= ref_max by construction"),
+    );
     MultiAlign::from_sequences(ref_row, instance_rows)
         .map_err(|e| BuildError::RaggedRows(e.to_string()))
 }
@@ -209,7 +207,8 @@ pub enum BuildError {
 
 // ── Reference reconstruction ──────────────────────────────────────────────────
 
-/// Determine (ref_min, ref_max) and reconstruct the combined ungapped reference.
+/// Determine the reference extent covered by the hits, 0-based half-open as
+/// `(ref_min, ref_max)`, and reconstruct the combined ungapped reference.
 fn reconstruct_reference(
     hits: &[PairwiseHit],
     ref_side: Reference,
@@ -218,26 +217,26 @@ fn reconstruct_reference(
     // Find the span of the reference covered by all hits.
     let ref_min = hits
         .iter()
-        .map(|h| ref_start(h, ref_side) as usize)
+        .map(|h| ref_span(h, ref_side).start() as usize)
         .min()
         .unwrap();
     let ref_max = hits
         .iter()
-        .map(|h| ref_end(h, ref_side) as usize)
+        .map(|h| ref_span(h, ref_side).end() as usize)
         .max()
         .unwrap();
 
     if let Some(seq) = provided {
-        return Ok((1, seq.len(), seq.to_vec()));
+        return Ok((0, seq.len(), seq.to_vec()));
     }
 
-    let span = ref_max - ref_min + 1;
+    let span = ref_max - ref_min;
     let mut combined = vec![b' '; span];
 
     for hit in hits {
         let gapped = ref_gapped_seq(hit, ref_side);
         let ungapped: Vec<u8> = gapped.bytes().filter(|&b| b != b'-').collect();
-        let offset = ref_start(hit, ref_side) as usize - ref_min;
+        let offset = ref_span(hit, ref_side).start() as usize - ref_min;
         let end = offset + ungapped.len();
         if end > span {
             return Err(BuildError::RefLenMismatch);
@@ -327,34 +326,6 @@ fn inst_span(hit: &PairwiseHit, side: Reference) -> Span {
         Reference::Subject => hit.query,
         Reference::Query   => hit.subj,
     }
-}
-
-/// `SequenceRow::seq_start` and the column arithmetic in this module are still
-/// 1-based fully closed, so this converts each span on the way out.  Once
-/// `SequenceRow` holds a `Span`, delete this and the four wrappers below and
-/// call `ref_span`/`inst_span` directly.
-///
-/// The `expect` holds because `aln_core::crossmatch` rejects a header covering
-/// no bases, and only an empty span has no 1-based closed form.
-fn one_based(span: Span) -> (u64, u64) {
-    span.as_1b_closed()
-        .expect("crossmatch rejects headers covering no bases")
-}
-
-fn ref_start(hit: &PairwiseHit, side: Reference) -> u64 {
-    one_based(ref_span(hit, side)).0
-}
-
-fn ref_end(hit: &PairwiseHit, side: Reference) -> u64 {
-    one_based(ref_span(hit, side)).1
-}
-
-fn inst_start(hit: &PairwiseHit, side: Reference) -> u64 {
-    one_based(inst_span(hit, side)).0
-}
-
-fn inst_end(hit: &PairwiseHit, side: Reference) -> u64 {
-    one_based(inst_span(hit, side)).1
 }
 
 fn ref_name<'a>(hit: &'a PairwiseHit, side: Reference) -> &'a str {

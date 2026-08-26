@@ -448,14 +448,14 @@ fn seq_to_string(seq: &[u8]) -> String {
 /// Format an instance identifier as `name:start-end_orient`, or bare `name` when
 /// the row carries no coordinates.
 fn instance_id(row: &aln_core::msa::SequenceRow) -> String {
-    if row.seq_start == 0 && row.seq_end == 0 {
+    let Some((start, end)) = row.span.and_then(|s| s.as_1b_closed()) else {
         return row.name.clone();
-    }
+    };
     let orient = match row.orient {
         Strand::Plus => '+',
         Strand::Minus => '-',
     };
-    format!("{}:{}-{}_{}", row.name, row.seq_start, row.seq_end, orient)
+    format!("{}:{}-{}_{}", row.name, start, end, orient)
 }
 
 #[cfg(test)]
@@ -497,8 +497,7 @@ mod tests {
     fn sample_msa() -> MultiAlign {
         let cons = SequenceRow::new("Mariner-N5_CyaStr", b"ACGT-ACGT".to_vec());
         let mut inst = SequenceRow::new("JAOVFP01_1", b"ACGT-ACGT".to_vec());
-        inst.seq_start = 1;
-        inst.seq_end = 9;
+        inst.span = Some(aln_coord::Span::from_1b_closed(1, 9).unwrap());
         MultiAlign::from_sequences(cons, vec![inst]).expect("fixture rows are equal width")
     }
 

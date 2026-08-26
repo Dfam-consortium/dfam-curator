@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 aln-core.workspace = true
+aln-coord.workspace = true
 aln-engine.workspace = true
 aln-parasail.workspace = true
 aln-reference.workspace = true
