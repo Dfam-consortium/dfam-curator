@@ -1,0 +1,24 @@
+[package]
+name = "te-composer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TE Composer — consensus building with improvements beyond the GIRI autocons workflow"
+
+[[bin]]
+name = "te-composer"
+path = "src/main.rs"
+
+[dependencies]
+cons-core.workspace = true
+aln-core.workspace = true
+dfam-stk-io.workspace = true
+aln-engine.workspace = true
+aln-parasail.workspace = true
+aln-reference.workspace = true
+aln-rmblast.workspace = true
+ram-core.workspace = true
+smitten.workspace = true
+rayon.workspace = true
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"

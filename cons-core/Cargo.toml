@@ -1,0 +1,18 @@
+[package]
+name = "cons-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Consensus-building pipeline shared by autocons and te-composer"
+
+[lib]
+name = "cons_core"
+path = "src/lib.rs"
+
+[dependencies]
+aln-core.workspace = true
+aln-engine.workspace = true
+aln-parasail.workspace = true
+aln-reference.workspace = true
+aln-rmblast.workspace = true
+rayon.workspace = true

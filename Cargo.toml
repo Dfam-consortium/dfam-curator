@@ -1,8 +1,5 @@
 [workspace]
-members = [".", "dfam-coord", "cons-core", "autocons", "te-composer"]
-# A bare `cargo build` builds the root package's binaries plus te-composer.
-# `autocons` is excluded deliberately: it exists to reproduce the C++ for
-# comparison work, and additionally gates its binary behind its own feature.
+members = [".", "dfam-coord", "cons-core", "te-composer"]
 default-members = [".", "te-composer"]
 resolver = "2"
 
@@ -23,19 +20,20 @@ license = "CC0-1.0"
 # the foot of this file: cargo then substitutes the working copy for the tag
 # without the manifests changing, so what is committed stays reproducible.
 
-aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
-dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
-aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
-aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
-aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
-aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.0" }
+aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
+aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.1.1" }
 cons-core = { path = "cons-core" }
 
 # RepeatAfterMe supplies the RAMExtend engine used by `te-composer --genome`,
 # consumed from its published tag like dfam-lib above. The tag's ram-core pins
 # dfam-lib 0.1.0, the same tag this workspace uses, so the graph carries one
 # copy of aln-core.
-ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.1.0" }
+ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.1.1" }
 # Genomic identifiers on the input sequences are parsed with the canonical
 # Smitten implementation rather than a local regex, so that recursive ranges
 # normalize correctly.
@@ -99,6 +97,7 @@ ureq = "2"
 dfam-coord = { path = "dfam-coord" }
 dfam-stk-io.workspace = true
 aln-core.workspace = true
+aln-coord.workspace = true
 
 [dev-dependencies]
 
@@ -112,6 +111,7 @@ aln-core.workspace = true
 # reason they must not use path dependencies of their own.
 #[patch."https://github.com/Dfam-consortium/dfam-lib"]
 #aln-core      = { path = "../dfam-lib-project/dfam-lib/aln-core" }
+#aln-coord     = { path = "../dfam-lib-project/dfam-lib/aln-coord" }
 #aln-engine    = { path = "../dfam-lib-project/dfam-lib/aln-engine" }
 #aln-parasail  = { path = "../dfam-lib-project/dfam-lib/aln-parasail" }
 #aln-rmblast   = { path = "../dfam-lib-project/dfam-lib/aln-rmblast" }

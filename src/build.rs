@@ -23,6 +23,7 @@
 ///
 /// The result is a `MultiAlign` where every row has the same width.
 use aln_core::msa::{MultiAlign, SequenceRow};
+use aln_coord::Span;
 use aln_core::Strand;
 use crate::io::crossmatch::PairwiseHit;
 
@@ -312,32 +313,48 @@ fn inst_gapped_seq<'a>(hit: &'a PairwiseHit, side: Reference) -> &'a str {
     std::str::from_utf8(bytes).unwrap_or("")
 }
 
-fn ref_start(hit: &PairwiseHit, side: Reference) -> u64 {
+/// The hit's reference-side span, given which side is playing reference.
+fn ref_span(hit: &PairwiseHit, side: Reference) -> Span {
     match side {
-        Reference::Subject => hit.subj_start,
-        Reference::Query   => hit.query_start,
+        Reference::Subject => hit.subj,
+        Reference::Query   => hit.query,
     }
+}
+
+/// The hit's instance-side span: whichever side `ref_span` did not take.
+fn inst_span(hit: &PairwiseHit, side: Reference) -> Span {
+    match side {
+        Reference::Subject => hit.query,
+        Reference::Query   => hit.subj,
+    }
+}
+
+/// `SequenceRow::seq_start` and the column arithmetic in this module are still
+/// 1-based fully closed, so this converts each span on the way out.  Once
+/// `SequenceRow` holds a `Span`, delete this and the four wrappers below and
+/// call `ref_span`/`inst_span` directly.
+///
+/// The `expect` holds because `aln_core::crossmatch` rejects a header covering
+/// no bases, and only an empty span has no 1-based closed form.
+fn one_based(span: Span) -> (u64, u64) {
+    span.as_1b_closed()
+        .expect("crossmatch rejects headers covering no bases")
+}
+
+fn ref_start(hit: &PairwiseHit, side: Reference) -> u64 {
+    one_based(ref_span(hit, side)).0
 }
 
 fn ref_end(hit: &PairwiseHit, side: Reference) -> u64 {
-    match side {
-        Reference::Subject => hit.subj_end,
-        Reference::Query   => hit.query_end,
-    }
+    one_based(ref_span(hit, side)).1
 }
 
 fn inst_start(hit: &PairwiseHit, side: Reference) -> u64 {
-    match side {
-        Reference::Subject => hit.query_start,
-        Reference::Query   => hit.subj_start,
-    }
+    one_based(inst_span(hit, side)).0
 }
 
 fn inst_end(hit: &PairwiseHit, side: Reference) -> u64 {
-    match side {
-        Reference::Subject => hit.query_end,
-        Reference::Query   => hit.subj_end,
-    }
+    one_based(inst_span(hit, side)).1
 }
 
 fn ref_name<'a>(hit: &'a PairwiseHit, side: Reference) -> &'a str {
@@ -370,13 +387,11 @@ mod tests {
             pct_del: 0.0,
             pct_ins: 0.0,
             query_name: "inst".to_string(),
-            query_start,
-            query_end,
+            query: Span::from_1b_closed(query_start, query_end).unwrap(),
             query_remaining: 0,
             query_seq: query_seq.to_vec(),
             subj_name: "ref".to_string(),
-            subj_start,
-            subj_end,
+            subj: Span::from_1b_closed(subj_start, subj_end).unwrap(),
             subj_remaining: 0,
             subj_seq: subj_seq.to_vec(),
             orientation: Strand::Plus,

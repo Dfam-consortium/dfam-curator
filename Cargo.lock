@@ -18,17 +18,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aln-coord"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
+
+[[package]]
 name = "aln-core"
-version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
+ "aln-coord",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "aln-engine"
-version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
  "aln-core",
  "rayon",
@@ -37,8 +43,8 @@ dependencies = [
 
 [[package]]
 name = "aln-parasail"
-version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
  "aln-core",
  "aln-engine",
@@ -47,8 +53,8 @@ dependencies = [
 
 [[package]]
 name = "aln-reference"
-version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
  "aln-core",
  "aln-engine",
@@ -56,8 +62,8 @@ dependencies = [
 
 [[package]]
 name = "aln-rmblast"
-version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+version = "0.1.1"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
  "aln-core",
  "aln-engine",
@@ -452,6 +458,7 @@ dependencies = [
 name = "dfam-curator"
 version = "0.6.1"
 dependencies = [
+ "aln-coord",
  "aln-core",
  "anyhow",
  "clap",
@@ -469,7 +476,7 @@ dependencies = [
 [[package]]
 name = "dfam-stk-io"
 version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.0#0717dddf977bf62c8bd5b302110f62e8ab7aba67"
+source = "git+https://github.com/Dfam-consortium/dfam-lib?tag=0.1.1#d495959f7705e856ebe99f73c1d0ad34b57ae041"
 dependencies = [
  "aln-core",
  "smitten",
@@ -1205,7 +1212,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 [[package]]
 name = "ram-core"
 version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/RepeatAfterMe?tag=RepeatAfterMe_V0.1.0#ba89cb1b18d5fc8ef6af0cef16b567986880305e"
+source = "git+https://github.com/Dfam-consortium/RepeatAfterMe?tag=RepeatAfterMe_V0.1.1#d98055571b3909ea67df84bf65afd878d7a55765"
 dependencies = [
  "aln-core",
  "rayon",
@@ -1334,7 +1341,7 @@ dependencies = [
 [[package]]
 name = "rmblast-lib"
 version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.5#aee53a91128b638be0b52c8c2ca6debc2da560ce"
+source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.6#1c2313e460d9e0704ff10b240e5b44fa438eabcf"
 dependencies = [
  "anyhow",
  "memmap2",
@@ -1346,7 +1353,7 @@ dependencies = [
 [[package]]
 name = "rmstats"
 version = "0.1.0"
-source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.5#aee53a91128b638be0b52c8c2ca6debc2da560ce"
+source = "git+https://github.com/Dfam-consortium/RMBlast.git?tag=3.0.6#1c2313e460d9e0704ff10b240e5b44fa438eabcf"
 dependencies = [
  "cc",
 ]
