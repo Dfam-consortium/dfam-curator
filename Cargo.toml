@@ -31,7 +31,7 @@ cons-core = { path = "cons-core" }
 
 # RepeatAfterMe supplies the RAMExtend engine used by `te-composer --genome`,
 # consumed from its published tag like dfam-lib above. The tag's ram-core pins
-# dfam-lib 0.1.0, the same tag this workspace uses, so the graph carries one
+# dfam-lib 0.2.0, the same tag this workspace uses, so the graph carries one
 # copy of aln-core.
 ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.2.0" }
 # Genomic identifiers on the input sequences are parsed with the canonical
@@ -101,3 +101,25 @@ aln-coord.workspace = true
 
 [dev-dependencies]
 
+# Local dfam-lib development — INACTIVE. Uncomment to build against a working
+# copy instead of the tag above, then comment it out again (and let Cargo.lock
+# re-resolve) before committing anything others must build from the tag alone.
+#
+# Note that RepeatAfterMe's crates also depend on dfam-lib by tag. This patch
+# rewrites the git source for the whole dependency graph, so they follow the
+# working copy too and everything stays on one copy of aln-core — which is the
+# reason they must not use path dependencies of their own.
+#[patch."https://github.com/Dfam-consortium/dfam-lib"]
+#aln-core      = { path = "../dfam-lib/aln-core" }
+#aln-coord     = { path = "../dfam-lib/aln-coord" }
+#aln-engine    = { path = "../dfam-lib/aln-engine" }
+#aln-parasail  = { path = "../dfam-lib/aln-parasail" }
+#aln-rmblast   = { path = "../dfam-lib/aln-rmblast" }
+#aln-reference = { path = "../dfam-lib/aln-reference" }
+#dfam-stk-io   = { path = "../dfam-lib/dfam-stk-io" }
+
+# Local RepeatAfterMe development — INACTIVE, and the same rules apply. The path
+# below is the public RepeatAfterMe checkout, which is where ram-core lives; the
+# private denovo repository does not carry that crate.
+#[patch."https://github.com/Dfam-consortium/RepeatAfterMe"]
+#ram-core      = { path = "../RepeatAfterMe/ram-core" }
