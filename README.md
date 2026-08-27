@@ -17,6 +17,7 @@ along with a library of shared alignment and consensus-calling routines.
 - **[linup](#linup)** — MSA viewer and format converter
 - **[stk](#stk)** — Stockholm file metadata tool (lint · edit · extract · convert)
 - **[discoord](#discoord)** — Sequence coordinate validator and repairer
+- **[te-composer](#te-composer)** — Consensus builder: from a set of TE copies to a seed alignment and consensus
 - **[update-cache](#update-cache)** — Populate the stk-lint validation cache
 
 ---
@@ -27,8 +28,8 @@ along with a library of shared alignment and consensus-calling routines.
 
 Download the latest release for your platform from the
 [GitHub releases page](https://github.com/Dfam-consortium/dfam-curator/releases).
-Extract the archive and place the binaries (`linup`, `stk`, `discoord`, `update-cache`)
-somewhere on your `PATH`.
+Extract the archive and place the binaries (`linup`, `stk`, `discoord`,
+`te-composer`, `update-cache`) somewhere on your `PATH`.
 
 ### Build from source
 
@@ -355,6 +356,73 @@ Tab- or comma-delimited files must have these columns (with a header row):
 | `start` | 1-based start coordinate |
 | `end` | 1-based fully-closed end coordinate |
 | `sequence` | Sequence data |
+
+---
+
+## te-composer
+
+Builds a consensus sequence and seed alignment from a FASTA of TE copies.
+It replaces the GIRI `autocons` / RepeatModeler `Refiner` step: pick a
+starting consensus from the copies, align every copy to it, re-call the
+consensus column by column, and repeat until the consensus stops changing.
+Given the genome the copies came from, it also extends the finished consensus
+past its edges with RAMExtend.
+
+```sh
+te-composer copies.fa family.stk
+te-composer copies.fa family.stk --consensus family.fa --format fasta
+te-composer copies.fa family.stk --genome hg38.2bit --assembly hg38
+```
+
+The Stockholm output carries the final alignment and the consensus as
+`#=GC RF`; `--consensus` writes the bare consensus as well. Progress goes to
+stderr.
+
+```
+USAGE:
+    te-composer [OPTIONS] <INPUT> [OUTPUT]
+
+ARGUMENTS:
+    <INPUT>     Input FASTA of TE copies; `-` for stdin
+    [OUTPUT]    Stockholm output; stdout when omitted
+
+OPTIONS:
+    --consensus <FILE>         Also write the bare consensus, in --format
+    --format <ig|fasta>        Format for --consensus  [default: ig]
+    --bootstrap-cons <FASTA>   Start from this consensus instead of deriving one
+                                 from the copies (refine an existing family)
+    -n, --num <N>              Consensi to emit; below 1.0, a fraction of the
+                                 input count  [default: 1]
+    --name <NAME>              Base name for emitted consensi  [default: CON]
+    --genome <2BIT>            Genome the copies came from; extends the consensus
+                                 past its edges. Input names must be Smitten
+                                 identifiers (chr1:1000-2000_+)
+    --assembly <ID>            Assembly the genome is; copies with a different
+                                 assembly prefix are not extended
+    --extend-max <BP>          Maximum extension per side  [default: 20000]
+    --matrix <FILE>            Alignment matrix, crossmatch layout
+    --gap-open <N>             Gap-open penalty; default from the matrix, else 25
+    --gap-extend <N>           Gap-extension penalty; default from the matrix, else 5
+    --min-score <N>            Discard alignments below this score  [default: 150]
+    --iterations <N>           Refinement passes after the first
+                                 [default: 20 for rmblast, 3 for parasail]
+    --backend <rmblast|parasail>
+                               rmblast is the seeded search (default). parasail
+                                 is exact Smith-Waterman: a few points of identity
+                                 above ~20% divergence, at many times the runtime
+    --threads <N>              Thread count. 0 (default) sizes it to --max-memory
+                                 for parasail, which is the safe way to run it
+    --max-memory <SIZE|PCT>    Memory budget for parasail  [default: 80%]
+    --silent                   Suppress the stderr progress report
+```
+
+The remaining flags tune the refinement (block repair, insertion packing,
+the CpG pass, the extension's matrix and thresholds); `te-composer --help`
+documents each with the measurements behind its default.
+
+On Apple Silicon and other non-x86 builds, `--backend parasail` runs the
+scalar reference aligner: same alignments, slower. The default backend is
+unaffected.
 
 ---
 

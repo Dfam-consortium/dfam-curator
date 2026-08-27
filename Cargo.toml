@@ -68,9 +68,12 @@ path = "src/bin/linup.rs"
 name = "stk"
 path = "src/bin/stk.rs"
 
+# Internal: compares the two consensus callers on one input. Not part of a
+# release; build it with `cargo build --features internal-tools`.
 [[bin]]
 name = "callcons"
 path = "src/bin/callcons.rs"
+required-features = ["internal-tools"]
 
 [[bin]]
 name = "update-cache"
@@ -98,6 +101,9 @@ dfam-coord = { path = "dfam-coord" }
 dfam-stk-io.workspace = true
 aln-core.workspace = true
 aln-coord.workspace = true
+
+[features]
+internal-tools = []
 
 [dev-dependencies]
 

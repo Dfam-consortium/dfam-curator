@@ -43,6 +43,7 @@ jobs:
              target/${{ matrix.target }}/release/stk \
              target/${{ matrix.target }}/release/discoord \
              target/${{ matrix.target }}/release/update-cache \
+             target/${{ matrix.target }}/release/te-composer \
              "${STAGING}/bin/"
           cp README.md Dfam_Seeds.md LICENSE "${STAGING}/"
           cp -r examples "${STAGING}/"
