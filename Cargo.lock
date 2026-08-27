@@ -1618,7 +1618,6 @@ dependencies = [
  "aln-coord",
  "aln-core",
  "aln-engine",
- "aln-parasail",
  "aln-reference",
  "aln-rmblast",
  "anyhow",

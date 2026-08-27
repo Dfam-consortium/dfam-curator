@@ -20,7 +20,7 @@ use aln_core::msa::InsertionPolicy;
 use aln_core::SubstMatrix;
 use aln_engine::{AlignMode, AlignParams};
 use aln_engine::engine::{ScoreMode, SearchParams};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 use aln_reference::ReferenceAligner;
 use aln_rmblast::{RmblastEngine, RmblastOptions};
 use cons_core::{BestHsp, Census, MinScore, RefinerFilter, run, Caller, Pairwise, Params};
@@ -1586,7 +1586,14 @@ fn main() -> Result<()> {
     let mut probe_engine: Option<RmblastEngine> = None;
     let mut results = match backend {
         Backend::Parasail => {
-            let a = ParasailAligner::new(matrix, align_params)
+            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+            if !cli.silent {
+                eprintln!(
+                    "note: parasail's SIMD kernels are x86-only; \
+                     --backend parasail runs the scalar reference aligner here"
+                );
+            }
+            let a = FastAligner::new(matrix, align_params)
                 .context("building the parasail aligner")?;
             drive(Pairwise::new(a), &cli, &seqs, &params, ext.as_ref())
         }

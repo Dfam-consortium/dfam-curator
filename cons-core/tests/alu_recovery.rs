@@ -12,7 +12,7 @@
 
 use aln_core::{Sequence, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 use cons_core::{run, Pairwise, Params};
 
 /// AluY, 311 bp.
@@ -105,7 +105,7 @@ fn family(seed: u64, n: usize, subst_pct: usize, indel_pct: usize) -> Vec<Sequen
         .collect()
 }
 
-fn aligner() -> ParasailAligner {
+fn aligner() -> FastAligner {
     let p = AlignParams {
         mode: AlignMode::Local,
         gap_open: 25,
@@ -114,7 +114,7 @@ fn aligner() -> ParasailAligner {
         traceback: true,
         bandwidth: None,
     };
-    ParasailAligner::new(SubstMatrix::parse(MATRIX).unwrap(), p).unwrap()
+    FastAligner::new(SubstMatrix::parse(MATRIX).unwrap(), p).unwrap()
 }
 
 /// Smith-Waterman (+1 / -1 / -2, linear gaps) — enough to score the recovery

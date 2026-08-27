@@ -15,7 +15,6 @@ aln-core.workspace = true
 aln-coord.workspace = true
 dfam-stk-io.workspace = true
 aln-engine.workspace = true
-aln-parasail.workspace = true
 aln-reference.workspace = true
 aln-rmblast.workspace = true
 ram-core.workspace = true

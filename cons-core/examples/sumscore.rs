@@ -12,7 +12,7 @@
 
 use aln_core::{io, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams, PairwiseAligner};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 
 fn read(p: &str) -> Result<Vec<aln_core::Sequence>, Box<dyn std::error::Error>> {
     Ok(io::read_fasta(std::io::BufReader::new(std::fs::File::open(p)?))?)
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     p.mode = AlignMode::Local;
     p.min_score = 1;
     p.traceback = false; // score-only kernels; nothing here needs the path
-    let al = ParasailAligner::new(matrix, p)?;
+    let al = FastAligner::new(matrix, p)?;
 
     let mut total: i64 = 0;
     let mut hit = 0usize;

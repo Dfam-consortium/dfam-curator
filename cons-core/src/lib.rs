@@ -33,6 +33,15 @@ pub mod lowqual;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use aln_core::consensus::ConsensusParams;
+
+/// The fastest pairwise aligner this build has: parasail's striped SIMD
+/// kernels on x86, which is the only architecture they are vendored for, and
+/// the scalar `ReferenceAligner` everywhere else. Both implement the same
+/// trait and produce the same alignments; only the speed differs.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+pub use aln_parasail::ParasailAligner as FastAligner;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+pub use aln_reference::ReferenceAligner as FastAligner;
 use aln_core::msa::{assemble_msa, InsertionPolicy, MsaMember, MultiAlign};
 use aln_core::seq::Strand;
 use aln_coord::Span;
@@ -1971,7 +1980,7 @@ impl AlignmentSource for aln_rmblast::RmblastEngine {
 mod reference_tests {
     use super::*;
     use aln_engine::{AlignMode, AlignParams};
-    use aln_parasail::ParasailAligner;
+    use crate::FastAligner;
 
     /// The seed reference must be reported, and must be the input that actually
     /// won phase 1 — not merely the first sequence.
@@ -1986,7 +1995,7 @@ mod reference_tests {
         seqs.push(Sequence::new("outlier", b"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT".to_vec()));
 
         let p = AlignParams { mode: AlignMode::Local, min_score: 1, ..Default::default() };
-        let al = ParasailAligner::new(aln_core::SubstMatrix::parse(TEST_MATRIX).unwrap(), p).unwrap();
+        let al = FastAligner::new(aln_core::SubstMatrix::parse(TEST_MATRIX).unwrap(), p).unwrap();
         let out = run(&Pairwise::new(al), &seqs, &Params::default()).unwrap();
 
         assert_eq!(out.len(), 1);

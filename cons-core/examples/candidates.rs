@@ -18,7 +18,7 @@
 use aln_core::consensus::ConsensusParams;
 use aln_core::{io, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 use cons_core::{score_candidates, Caller, Pairwise, Params};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..AlignParams::from_matrix(&matrix)
     };
     eprintln!("gap_open={} gap_extend={}", params.gap_open, params.gap_extend);
-    let aligner = ParasailAligner::new(matrix, params)?;
+    let aligner = FastAligner::new(matrix, params)?;
 
     let params = Params {
         caller: Caller::Giri,

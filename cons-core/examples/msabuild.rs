@@ -12,7 +12,7 @@
 use aln_core::msa::{assemble_msa, InsertionPolicy, MsaMember};
 use aln_core::{io, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams, PairwiseAligner};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         min_score: 1,
         ..AlignParams::from_matrix(&matrix)
     };
-    let aligner = ParasailAligner::new(matrix, params)?;
+    let aligner = FastAligner::new(matrix, params)?;
 
     let reference = &seqs[0];
     let profile = aligner.prepare_subject(reference)?;

@@ -492,7 +492,7 @@ pub fn resolve_by_all_vs_all_opt(
         traceback: true,
         bandwidth: None,
     };
-    let aligner = aln_parasail::ParasailAligner::new(matrix.clone(), p).ok()?;
+    let aligner = crate::FastAligner::new(matrix.clone(), p).ok()?;
     let seqs: Vec<aln_core::Sequence> = inst
         .iter()
         .enumerate()

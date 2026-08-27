@@ -43,7 +43,7 @@
 
 use aln_core::{io, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams, PairwiseAligner};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 
 fn read_one(path: &str) -> Result<Option<aln_core::Sequence>, Box<dyn std::error::Error>> {
     let f = std::fs::File::open(path)?;
@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => 1,
     };
     p.traceback = true;
-    let al = ParasailAligner::new(matrix, p)?;
+    let al = FastAligner::new(matrix, p)?;
 
     // Truth as subject so coverage is measured against the truth.
     match al.align(&cons, &truth)? {

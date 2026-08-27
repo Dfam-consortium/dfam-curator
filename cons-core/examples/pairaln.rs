@@ -10,7 +10,7 @@
 
 use aln_core::{io, Sequence, SubstMatrix};
 use aln_engine::{AlignMode, AlignParams, PairwiseAligner};
-use aln_parasail::ParasailAligner;
+use cons_core::FastAligner;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "matrix {} gap_open={} gap_extend={} mode={:?}",
         matrix_path, params.gap_open, params.gap_extend, params.mode
     );
-    let aligner = ParasailAligner::new(matrix, params)?;
+    let aligner = FastAligner::new(matrix, params)?;
 
     // The C++ makes the reference the *subject* (`bot`) and the instance the
     // query (`top`); mirror that.

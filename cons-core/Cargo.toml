@@ -13,7 +13,11 @@ path = "src/lib.rs"
 aln-core.workspace = true
 aln-coord.workspace = true
 aln-engine.workspace = true
-aln-parasail.workspace = true
 aln-reference.workspace = true
 aln-rmblast.workspace = true
 rayon.workspace = true
+
+# parasail vendors only x86 SIMD kernels, so it is a dependency only there.
+# Elsewhere `FastAligner` is the scalar reference aligner.
+[target.'cfg(any(target_arch = "x86_64", target_arch = "x86"))'.dependencies]
+aln-parasail.workspace = true
