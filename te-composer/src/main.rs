@@ -182,23 +182,23 @@ struct Cli {
     /// fixed point *or* repeats one seen earlier (a cycle), so a larger budget
     /// buys more passes only where they are still changing the answer. Runs
     /// that stop stably give the same result at 3 as at 30.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     iterations: Option<usize>,
 
     /// Alignment matrix, in crossmatch layout.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     matrix: Option<PathBuf>,
 
     /// Gap-open penalty, as a positive magnitude.
     ///
     /// Defaults to the matrix's own `GAP` line when it has one, so a matrix and
     /// its penalties cannot drift apart. Falls back to 25.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     gap_open: Option<u32>,
 
     /// Gap-extension penalty, as a positive magnitude. Defaults to the matrix's
     /// `GAP` line, else 5.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     gap_extend: Option<u32>,
 
     /// Discard alignments below this score. Default 150, for every backend.
@@ -213,11 +213,11 @@ struct Cli {
     /// 2.7 GB at a floor of 1 against 1.5 s and 88 MB at 150, on the same
     /// input. A DP backend reports one optimal alignment per pair either way,
     /// so for it this is purely about what enters the MSA.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     min_score: Option<i32>,
 
     /// Seed word size. `--backend rmblast` only.
-    #[arg(long, default_value_t = 7)]
+    #[arg(long, default_value_t = 7, help_heading = "Advanced options")]
     word_size: u32,
 
     /// Turn off DUST low-complexity query masking.
@@ -231,7 +231,7 @@ struct Cli {
     /// 20 kb instances produced 8.7M HSPs and 25 GB of peak memory.
     ///
     /// Measured cost on a well-behaved family: 0.7% of HSPs.
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, help_heading = "Advanced options")]
     no_dust: bool,
 
     /// How an instance's alignments become MSA rows. `--backend rmblast` only.
@@ -249,7 +249,7 @@ struct Cli {
     /// `tiled` trims each strand into a tiling and then keeps the
     /// higher-scoring one, so every score it reports or ranks on is a trimmed
     /// score and one convention serves both phases.
-    #[arg(long, value_enum, default_value_t = HspPolicy::Tiled)]
+    #[arg(long, value_enum, default_value_t = HspPolicy::Tiled, help_heading = "Advanced options")]
     hsps: HspPolicy,
 
     /// Repair low-quality blocks between two rounds of refinement.
@@ -271,7 +271,7 @@ struct Cli {
     /// scanning window, both resolved by the length vote. Measured through this
     /// exact path on both benchmarks, it was the only policy that beat the
     /// low-quality selection alone on each.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = false, help_heading = "Advanced options")]
     no_repair_blocks: bool,
 
     /// Do not re-derive spans the consensus has no bases for.
@@ -282,87 +282,87 @@ struct Cli {
     /// Re-deriving those spans inside each pass lets a recovered base join the
     /// reference for the next one, which compounds. Measured to help against
     /// known ancestors and to be roughly neutral on curated hs1 families.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = false, help_heading = "Advanced options")]
     no_pack_insertions: bool,
 
     /// Merge gap runs separated by at most this many called columns.
-    #[arg(long, default_value_t = 2, hide = true)]
+    #[arg(long, default_value_t = 2, hide = true, help_heading = "Advanced options")]
     pack_max_sep: usize,
 
     /// A span needs one instance contributing at least this many bases.
-    #[arg(long, default_value_t = 5, hide = true)]
+    #[arg(long, default_value_t = 5, hide = true, help_heading = "Advanced options")]
     pack_min_seg: usize,
 
     /// The all-against-all winner must beat this summed score for a span to be
     /// re-derived. 0 means it must align positively to the other instances.
-    #[arg(long, default_value_t = 0, hide = true)]
+    #[arg(long, default_value_t = 0, hide = true, help_heading = "Advanced options")]
     pack_min_score: i64,
 
-    /// Genome the input sequences were taken from, as a 2bit. Given one,
-    /// the finished consensus is extended past its edges with RAMExtend and
-    /// then refined again against the widened instances.
+    /// Genome the input sequences were taken from, as a 2bit -- for automated extension.
     ///
-    /// Input names must be Smitten identifiers — `chr1:1000-2000_+`, or
-    /// `hg38:chr1:1000-2000_+` — since that is what locates an instance in the
-    /// genome. Copies that cannot be located, or whose bases do not match the
-    /// genome there, are reported and left out of the extension; they stay in
-    /// the family.
+    /// Given a 2bit sequence file containing context for each sequence in the
+    /// input set, this will enable the automated extension algorithm (RAMExtend)
+    /// during refinement.  Input sequence names must be Smitten identifiers — 
+    /// `chr1:1000-2000_+`, or `hg38:chr1:1000-2000_+` — since that is what 
+    /// locates an instance in the genome. Copies that cannot be located, or 
+    /// whose bases do not match the genome there, are reported and left out 
+    /// of the extension; they stay in the family.
     #[arg(long, value_name = "2BIT")]
     genome: Option<PathBuf>,
 
     /// Assembly the genome represents. When set, an input whose identifier
     /// carries a different assembly prefix is not extended.
-    #[arg(long, value_name = "ID", requires = "genome")]
+    #[arg(long, value_name = "ID", requires = "genome", help_heading = "Advanced options")]
     assembly: Option<String>,
 
     /// Maximum extension per side.
-    #[arg(long, default_value_t = 20_000, value_name = "BP", requires = "genome")]
+    #[arg(long, default_value_t = 20_000, value_name = "BP", requires = "genome", help_heading = "Advanced options")]
     extend_max: i32,
 
     /// Band half-width for the extension alignment.
-    #[arg(long, default_value_t = 40, requires = "genome")]
+    #[arg(long, default_value_t = 40, requires = "genome", help_heading = "Advanced options")]
     extend_bandwidth: i32,
 
     /// Copies that must reach an edge before extension is attempted; also the
     /// multiplier in the per-column score improvement the extension demands.
-    #[arg(long, default_value_t = 3, requires = "genome")]
+    #[arg(long, default_value_t = 3, requires = "genome", help_heading = "Advanced options")]
     extend_min_seqs: i32,
 
     /// Extension matrix. Default picks one from the family's Kimura
     /// divergence, as `extend-stk.pl` does.
-    #[arg(long, value_name = "NAME", requires = "genome")]
+    #[arg(long, value_name = "NAME", requires = "genome", help_heading = "Advanced options")]
     extend_matrix: Option<String>,
 
     /// Score improvement per consensus column the extension must sustain.
     /// Default is `--extend-min-seqs` x the matrix diagonal average.
-    #[arg(long, value_name = "N", requires = "genome")]
+    #[arg(long, value_name = "N", requires = "genome", help_heading = "Advanced options")]
     extend_min_improvement: Option<i32>,
 
     /// Columns of slack allowed between an instance's alignment edge and the
     /// consensus edge before it stops driving the extension on that side.
-    #[arg(long, default_value_t = 10, requires = "genome")]
+    #[arg(long, default_value_t = 10, requires = "genome", help_heading = "Advanced options")]
     extend_edge_slop: usize,
 
     /// Refuse an extension whose two sides together add more than this.
     ///
     /// An extension is also refused outright if either side reaches
     /// `--extend-max`, since a side that was stopped has not found an edge.
-    #[arg(long, default_value_t = 25_000, value_name = "BP", requires = "genome", hide = true)]
+    #[arg(long, default_value_t = 25_000, value_name = "BP", requires = "genome", hide = true, help_heading = "Advanced options")]
     extend_max_total: i32,
 
     /// Fraction of comparable bases an input must share with the genome at
     /// its stated coordinates to take part in the extension.
-    #[arg(long, default_value_t = 0.95, value_name = "F", requires = "genome")]
+    #[arg(long, default_value_t = 0.95, value_name = "F", requires = "genome", help_heading = "Advanced options")]
     extend_min_identity: f64,
 
     /// Extend but do not refine afterwards: the extension is spliced onto the
     /// consensus and reported as-is.
-    #[arg(long, default_value_t = false, requires = "genome", hide = true)]
+    #[arg(long, default_value_t = false, requires = "genome", hide = true, help_heading = "Advanced options")]
     extend_no_refine: bool,
 
     /// Ruzzo-Tompa segment-score threshold for calling a block low-quality.
     /// Higher is more conservative. `--repair-blocks` only.
-    #[arg(long, default_value_t = 1.0, hide = true)]
+    #[arg(long, default_value_t = 1.0, hide = true, help_heading = "Advanced options")]
     repair_threshold: f64,
 
     /// Also take repair candidates from a scanning window of this many
@@ -377,11 +377,11 @@ struct Cli {
     ///
     /// 10 is the default and is what policy D means; 0 falls back to the
     /// low-quality selection alone (policy A).
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = 10, help_heading = "Advanced options")]
     repair_window: usize,
 
     /// Shortest row worth keeping after `--trim-reused`.
-    #[arg(long, default_value_t = 25, hide = true)]
+    #[arg(long, default_value_t = 25, hide = true, help_heading = "Advanced options")]
     min_row_len: usize,
 
     /// Write every refinement pass's consensus to `<FILE>` as FASTA.
@@ -390,7 +390,7 @@ struct Cli {
     /// by score, which measures how well a consensus explains the instances —
     /// not how close it is to the truth. Where a truth is known, this makes the
     /// two comparable.
-    #[arg(long, value_name = "FASTA", hide = true)]
+    #[arg(long, value_name = "FASTA", hide = true, help_heading = "Advanced options")]
     dump_refinement: Option<PathBuf>,
 
     /// Write a TSV census of every alignment entering the MSA.
@@ -398,7 +398,7 @@ struct Cli {
     /// One row per alignment: phase, reference index, query index, score,
     /// alignment columns, query span, subject span. Use it to see what a low
     /// `--min-score` actually admits.
-    #[arg(long, value_name = "TSV", hide = true)]
+    #[arg(long, value_name = "TSV", hide = true, help_heading = "Advanced options")]
     dump_alignments: Option<PathBuf>,
 
     /// Disable Phil Green's complexity-adjusted scoring.
@@ -411,13 +411,13 @@ struct Cli {
     /// was off, as `--complexity-adjust`, to keep the GIRI-aligner comparison
     /// varying one thing at a time; that comparison is done.)
     #[arg(long = "no-complexity-adjust", default_value_t = true,
-          action = clap::ArgAction::SetFalse, hide = true)]
+          action = clap::ArgAction::SetFalse, hide = true, help_heading = "Advanced options")]
     complexity_adjust: bool,
 
     /// Mammalian sequences: run GIRI's species-aware CpG restoration on the
     /// final consensus. `--orig` only; the Dfam caller restores CpG on every
     /// pass regardless.
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, help_heading = "Advanced options")]
     mam: bool,
 
     /// Skip the CpG restoration pass. Dfam caller only.
@@ -428,42 +428,41 @@ struct Cli {
     ///
     /// Note this applies it to *both* phases. The C++ `--orig` is the same in
     /// effect, since its phase 1 always used the GIRI caller anyway.
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced options")]
     orig: bool,
 
     /// Minimum non-gap residues in an alignment column. Applies only with
     /// `--orig`, matching the C++.
-    #[arg(long, default_value_t = 2, hide = true)]
+    #[arg(long, default_value_t = 2, hide = true, help_heading = "Advanced options")]
     min: usize,
 
-    /// Alignment backend. Defaults to the seeded search, which is adequate
-    /// across the whole size range measured and orders of magnitude cheaper.
+    /// Alignment backend. 
     ///
     /// Full dynamic programming buys about 3 points of consensus identity, but
     /// only above ~20% divergence; below that the two agree to within 0.3
     /// points at equal coverage.
-    #[arg(long, value_enum, default_value_t = Backend::Rmblast)]
+    #[arg(long, value_enum, default_value_t = Backend::Rmblast, help_heading = "Advanced options")]
     backend: Backend,
 
     /// How insertions are merged into the multiple alignment.
-    #[arg(long, value_enum, default_value_t = Insertions::Incremental, hide = true)]
+    #[arg(long, value_enum, default_value_t = Insertions::Incremental, hide = true, help_heading = "Advanced options")]
     insertions: Insertions,
 
-    /// Also write the bare consensus here, in `--format`.
+    /// Save the consensus independently from the stockholmf file in `--format`.
     ///
     /// The Stockholm output already contains the consensus; this is for
     /// downstream tools that want it on its own.
     #[arg(long, value_name = "FILE")]
     consensus: Option<PathBuf>,
 
-    /// Format for `--consensus`.
+    /// Format for `--consensus` file.
     #[arg(long, value_enum, default_value_t = OutFormat::Ig)]
     format: OutFormat,
 
     /// Write each final multiple alignment to `<PREFIX>.<name>` as aligned
     /// FASTA. Superseded by the Stockholm output; kept for scripts that read
     /// aligned FASTA.
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, help_heading = "Advanced options")]
     aln: Option<String>,
 
     /// Run with exactly N threads, BYPASSING the memory guard.
@@ -493,11 +492,11 @@ struct Cli {
     /// measured against MemAvailable, which already excludes memory in use —
     /// so it is not the same quantity as the "half of RAM" that long-running
     /// daemons reserve to protect the page cache.
-    #[arg(long, default_value = "80%")]
+    #[arg(long, default_value = "80%", help_heading = "Advanced options")]
     max_memory: String,
 
     /// Line width for sequence output; 0 disables wrapping.
-    #[arg(long, default_value_t = 60)]
+    #[arg(long, default_value_t = 60, help_heading = "Advanced options")]
     width: usize,
 }
 
@@ -766,7 +765,6 @@ fn write_stockholm<W: Write>(
     out: &mut W,
     r: &cons_core::Refined,
     params: &Params,
-    comment: &str,
 ) -> anyhow::Result<()> {
     // `#=GC RF` needs the consensus in the alignment's own column coordinates,
     // not the ungapped form the caller reports.
@@ -801,18 +799,29 @@ fn write_stockholm<W: Write>(
         }
     }
 
-    // Provenance after ID, before SQ, so the record reads top-down.
+    // Provenance after ID, before SQ, so the record reads top-down. Every line
+    // te-composer adds carries the `TE-COMPOSER:` tag, so a curator reading a
+    // seed can tell those notes from the ones written by hand.
+    //
+    // The reference, the final score and the final divergence, then whatever
+    // the run recorded as it went. The pass count and stop reason that used to
+    // sit here describe one run rather than the family, and the stderr report
+    // already carries them.
+    let (div, divcpg, _, _, _) = family_stats(&r.msa, &gapped);
     let at = rec.gf.iter().position(|(t, _)| t == "SQ").unwrap_or(rec.gf.len());
     let mut n = 0;
-    for field in comment.split(' ') {
-        if let Some((k, v)) = field.split_once('=') {
-            rec.gf.insert(at + n, ("**".to_string(), format!("{k}: {v}")));
-            n += 1;
-        }
-    }
-    for note in &r.notes {
-        rec.gf.insert(at + n, ("**".to_string(), note.clone()));
-        n += 1;
+    let mut note = |text: String, n: &mut usize| {
+        rec.gf.insert(at + *n, ("**".to_string(), format!("TE-COMPOSER: {text}")));
+        *n += 1;
+    };
+    note(format!("BOOTSTRAP-REF: {}", r.reference.name), &mut n);
+    note(format!("SCORE: {}", r.score), &mut n);
+    note(
+        format!("DIVERGENCE: Kimura {div:.2}%, CpG-adjusted {divcpg:.2}%"),
+        &mut n,
+    );
+    for text in &r.notes {
+        note(text.clone(), &mut n);
     }
     rec.write_to(out)?;
     Ok(())
@@ -885,7 +894,7 @@ fn banner(cli: &Cli) {
 /// The spread matters more than the count. A family of uniform full-length
 /// instances and one of mostly fragments behave differently at every later
 /// stage, and the median against the extremes says which you have.
-fn report_input(cli: &Cli, seqs: &[aln_core::Sequence]) {
+fn report_input(cli: &Cli, seqs: &[aln_core::Sequence], threads: usize) {
     if cli.silent || seqs.is_empty() {
         return;
     }
@@ -916,11 +925,24 @@ fn report_input(cli: &Cli, seqs: &[aln_core::Sequence]) {
         total, lens[0], lens[n - 1], med, lens[n / 4], lens[(3 * n) / 4].min(lens[n - 1]),
     );
     eprintln!("  composition: {:.0}% GC{}", gc_pct, flag);
+    // Not necessarily the core count, nor what `--threads` asked for:
+    // `--max-memory` caps it for the DP backends, and the number of input
+    // sequences caps it for every backend, so a run can use far fewer threads
+    // than the machine has.
+    eprintln!("  threads: {threads}");
 }
 
-fn phase(cli: &Cli, name: &str) {
-    if !cli.silent {
-        eprintln!("\n── {name} ──");
+/// A stage heading. `label` names the consensus the stage belongs to, and is
+/// set only when a run builds more than one. `-n 3` prints the refinement,
+/// extension, repair and summary blocks three times each; unlabelled, the
+/// three sets read as one run that changed its mind twice.
+fn phase(cli: &Cli, label: Option<&str>, name: &str) {
+    if cli.silent {
+        return;
+    }
+    match label {
+        Some(l) => eprintln!("\n── {l}: {name} ──"),
+        None => eprintln!("\n── {name} ──"),
     }
 }
 
@@ -1036,6 +1058,7 @@ fn report_state(
 /// middle should not have to reconstruct where it ended up.
 fn report_summary(
     cli: &Cli,
+    label: Option<&str>,
     r: &cons_core::Refined,
     params: &Params,
     total_instances: usize,
@@ -1046,7 +1069,7 @@ fn report_summary(
     }
     let g = gapped_consensus(r, params);
     let (div, divcpg, len, rows, instances) = family_stats(&r.msa, &g);
-    eprintln!("\n── summary ──");
+    phase(cli, label, "summary");
     eprintln!("  {}: consensus {len} bp", r.name);
     eprintln!("  instances:  {instances} of {total_instances} participating");
     eprintln!("  rows:       {}", rows_count(rows, instances));
@@ -1165,7 +1188,7 @@ fn compose<A: cons_core::AlignmentSource>(
                 .into_iter()
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("{} contains no sequence", path.display()))?;
-            phase(cli, PHASE_BOOTSTRAP);
+            phase(cli, None, PHASE_BOOTSTRAP);
             if !cli.silent {
                 eprintln!(
                     "  skipped — starting from supplied consensus {} ({} bp)",
@@ -1188,23 +1211,35 @@ fn compose<A: cons_core::AlignmentSource>(
             }
         }
         None => {
-            phase(cli, PHASE_BOOTSTRAP);
+            phase(cli, None, PHASE_BOOTSTRAP);
             run(a, seqs, &deferred)?
         }
     };
     let mut out = Vec::with_capacity(results.len());
 
-    for mut refined in results {
+    // `-n 3` asks for three consensi, and every stage below runs once per
+    // consensus, so each block from here down carries the name of the one it
+    // reports on. One consensus keeps the bare headings.
+    let total = results.len();
+    if total > 1 && !cli.silent {
+        eprintln!("  {total} consensi to build, best-scoring reference first");
+    }
+    for (i, mut refined) in results.into_iter().enumerate() {
+        let label = (total > 1).then(|| format!("{} ({} of {total})", refined.name, i + 1));
+        let label = label.as_deref();
         if !supplied {
+            if label.is_some() {
+                phase(cli, label, PHASE_BOOTSTRAP);
+            }
             report_reference(cli, &refined, seqs);
             report_bootstrap_state(cli, &refined, seqs.len());
         }
-        phase(cli, PHASE_REFINE);
+        phase(cli, label, PHASE_REFINE);
         report_passes(cli, None, &refined, params.iterations);
         report_state(cli, &refined, params, seqs.len(), None);
         let widened = match ext {
             Some(opts) => {
-                phase(cli, PHASE_EXTEND);
+                phase(cli, label, PHASE_EXTEND);
                 let w = extend_one(a, cli, seqs, &deferred, opts, &mut refined)?;
                 if w.is_some() {
                     // Probe the *extended consensus*, which is where a
@@ -1220,7 +1255,7 @@ fn compose<A: cons_core::AlignmentSource>(
                     // curator is the one who can judge whether a satellite
                     // family is wanted, and refusing here would discard work
                     // rather than avoid it.
-                    phase(cli, PHASE_REFINE);
+                    phase(cli, label, PHASE_REFINE);
                     report_passes(cli, None, &refined, params.iterations);
                     report_state(cli, &refined, params, seqs.len(), None);
                 }
@@ -1232,7 +1267,7 @@ fn compose<A: cons_core::AlignmentSource>(
 
         out.push(match (&params.repair_matrix, params.repair_blocks) {
             (Some(mx), true) => {
-                phase(cli, PHASE_REPAIR);
+                phase(cli, label, PHASE_REPAIR);
                 let r = repair_last(a, cli, final_seqs, params, mx, refined)?;
                 report_state(cli, &r, params, seqs.len(), None);
                 r
@@ -1581,7 +1616,7 @@ fn main() -> Result<()> {
         None => None,
     };
 
-    report_input(&cli, &seqs);
+    report_input(&cli, &seqs, threads);
 
     let mut probe_engine: Option<RmblastEngine> = None;
     let mut results = match backend {
@@ -1763,23 +1798,24 @@ tandem array rather than a transposable element",
         None => None,
     };
 
-    for r in &results {
-        // `SCORE=` matches the C++.  `REF=` and `REFSCORE=` are additions:
-        // reference selection is a discrete argmax, so knowing which input
-        // seeded a consensus — and by what margin — is the first thing anyone
-        // debugging an unexpected result needs.
-        let stop = match r.stop {
-            cons_core::StopReason::Converged => "converged",
-            cons_core::StopReason::Cycled => "cycled",
-            cons_core::StopReason::Exhausted => "exhausted",
-        };
-        let comment = format!(
-            "SCORE={:.2} REF={} REFIDX={} REFSCORE={} PASSES={} CONVERGED={} STOP={}",
-            r.score as f64, r.reference.name, r.reference.index, r.reference.score,
-            r.passes, r.converged, stop,
-        );
+    // Every stderr line before any of stdout. The Stockholm output is buffered,
+    // and on a terminal carrying both streams the buffer used to drain between
+    // two report lines, splitting a record in half. Writing the whole report
+    // first and flushing it leaves one boundary between the streams whatever
+    // the buffer does afterwards.
+    let total = results.len();
+    for (i, r) in results.iter().enumerate() {
+        let label = (total > 1).then(|| format!("{} ({} of {total})", r.name, i + 1));
+        report_summary(&cli, label.as_deref(), r, &params, seqs.len(), started.elapsed());
+    }
+    std::io::stderr().flush().ok();
 
-        write_stockholm(&mut out, r, &params, &comment)
+    for r in &results {
+        // Which input seeded this consensus, for the `--consensus` header;
+        // `write_stockholm` writes the same fact into the Stockholm record.
+        let comment = format!("BOOTSTRAP-REF={}", r.reference.name);
+
+        write_stockholm(&mut out, r, &params)
             .with_context(|| format!("writing Stockholm for {}", r.name))?;
 
         if let Some(w) = cons_out.as_mut() {
@@ -1812,9 +1848,6 @@ tandem array rather than a transposable element",
     }
     if let Some(mut w) = cons_out {
         w.flush()?;
-    }
-    for r in &results {
-        report_summary(&cli, r, &params, seqs.len(), started.elapsed());
     }
     out.flush()?;
     Ok(())

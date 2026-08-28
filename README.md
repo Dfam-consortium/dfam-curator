@@ -368,10 +368,27 @@ consensus column by column, and repeat until the consensus stops changing.
 Given the genome the copies came from, it also extends the finished consensus
 past its edges with RAMExtend.
 
+This is an alternative to the `autocons`/`amaln` GIRI tools and the 
+RepeatModeler `Refiner`/`alignAndCallConsensus` tools.  For example:
+
 ```sh
-te-composer copies.fa family.stk
-te-composer copies.fa family.stk --consensus family.fa --format fasta
-te-composer copies.fa family.stk --genome hg38.2bit --assembly hg38
+autocons --name my_family instances.fa new_cons.fa
+amaln new_cons.fa instances.fa my_family.aln 
+
+# Is equivalent to:
+te-composer instances.fa --consensus new_cons.fa > my_family.stk
+
+# Or if you want new_cons.fa in IG format and the alignment in IG format:
+te-composer instances.fa --consensus new_cons.fa --format ig > my_family.stk
+stk convert --to msa foo.stk | sed 's/>/;/' > my_family.aln
+```
+
+To extend as well as build/refine a family you can provide a 2bit file
+containing the context (e.g assembly) which each input sequence is derived
+from:
+
+```sh
+te-composer copies.fa family.stk --genome hg38.2bit 
 ```
 
 The Stockholm output carries the final alignment and the consensus as

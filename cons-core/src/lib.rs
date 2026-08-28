@@ -327,7 +327,7 @@ pub struct Refined {
     /// different consensus. Anyone debugging an unexpected result needs to know
     /// which sequence won, and by how much.
     pub reference: Reference,
-    /// Total alignment score from the final pass — the `SCORE=` annotation.
+    /// Total alignment score from the final pass.
     pub score: i64,
     /// The same pass under [`mean_score_per_base`].
     pub norm_score: f64,
@@ -336,8 +336,7 @@ pub struct Refined {
     /// Passes actually run.
     pub passes: usize,
     /// True if it stopped because the consensus stopped changing rather than
-    /// because it ran out of passes. Kept for the `CONVERGED=` output field;
-    /// [`StopReason`] carries the full answer.
+    /// because it ran out of passes. [`StopReason`] carries the full answer.
     pub converged: bool,
     /// Why the loop stopped.
     pub stop: StopReason,

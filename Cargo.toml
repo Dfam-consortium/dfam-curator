@@ -6,7 +6,7 @@ resolver = "2"
 # The consensus-building tools live here alongside linup/stk/discoord; the
 # alignment foundation they sit on is dfam-lib, consumed from its published tag.
 [workspace.package]
-version = "0.1.0"
+version = "0.6.4"
 edition = "2021"
 license = "CC0-1.0"
 
@@ -49,7 +49,7 @@ targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-
 
 [package]
 name = "dfam-curator"
-version = "0.6.1"
+version.workspace = true
 edition = "2024"
 description = "Dfam-centric MSA curation library and toolkit"
 license = "CC0-1.0"

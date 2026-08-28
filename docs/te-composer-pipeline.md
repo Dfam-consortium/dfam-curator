@@ -572,9 +572,9 @@ refused extension leaves a consensus indistinguishable from one that was never
 offered an extension:
 
 ```
-#=GF ** Extension: left extension hit the 20000 bp limit — no edge found on that side, dropping it
-#=GF ** Extension: anchored 16 of 16 copies, divergence 1.8%, matrix 14p43g
-#=GF ** Extension: right 13383 bp only (left side dropped or empty)
+#=GF ** TE-COMPOSER: Extension: left extension hit the 20000 bp limit — no edge found on that side, dropping it
+#=GF ** TE-COMPOSER: Extension: anchored 16 of 16 copies, divergence 1.8%, matrix 14p43g
+#=GF ** TE-COMPOSER: Extension: right 13383 bp only (left side dropped or empty)
 ```
 
 **Refiner refuses only when both sides cap**, at `L=10000`, testing the
@@ -720,12 +720,11 @@ want it on its own.
 ```
 # STOCKHOLM 1.0
 #=GF ID MyFam
-#=GF ** SCORE: 3038.00
-#=GF ** REF: chr22:33101-33204_-
-#=GF ** PASSES: 3
-#=GF ** STOP: converged
-#=GF ** Extension: anchored 30 of 30 copies, divergence 7.8%, matrix 14p43g
-#=GF ** Extension: left 101 bp, right 100 bp
+#=GF ** TE-COMPOSER: BOOTSTRAP-REF: chr22:33101-33204_-
+#=GF ** TE-COMPOSER: SCORE: 3038
+#=GF ** TE-COMPOSER: DIVERGENCE: Kimura 7.82%, CpG-adjusted 5.91%
+#=GF ** TE-COMPOSER: Extension: anchored 30 of 30 copies, divergence 7.8%, matrix 14p43g
+#=GF ** TE-COMPOSER: Extension: left 101 bp, right 100 bp
 #=GF SQ 30
 #=GC RF       TTATGGAGGCTGAGAAGTCCCACGAT...
 chr22:33101-33204_-  .TATGCAGGCAGAGAAGTCCCATGATC...
