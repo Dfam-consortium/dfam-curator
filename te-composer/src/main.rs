@@ -431,10 +431,26 @@ struct Cli {
     #[arg(long, help_heading = "Advanced options")]
     orig: bool,
 
-    /// Minimum non-gap residues in an alignment column. Applies only with
-    /// `--orig`, matching the C++.
-    #[arg(long, default_value_t = 2, hide = true, help_heading = "Advanced options")]
-    min: usize,
+    /// Call a gap in any alignment column fewer than N instances put a
+    /// residue in.
+    ///
+    /// `acons --min`. Use it to stop a consensus running out into sequence
+    /// only one instance supports: flanks added around each copy before
+    /// extraction, or edges a de-novo finder over-extended. Phase 1 picks a
+    /// reference and counts it in its own profile, so wherever the other
+    /// instances stop aligning, the consensus carries on as a verbatim copy of
+    /// that one instance; phase 2 then aligns it back to itself and converges.
+    /// A floor of 2 breaks that loop.
+    ///
+    /// Default 0, off, except under `--orig`, which restores the C++'s 2. Both
+    /// callers honour it. It binds in phase 2 only: phase 1 keeps the reference
+    /// row and calls with a floor of 1, as the C++ does.
+    ///
+    /// Insertion packing runs after the gate and needs two instances carrying
+    /// sequence across a span before it re-derives one, so a value above 2 gates
+    /// the call more strictly than it gates what packing puts back.
+    #[arg(long, value_name = "N", help_heading = "Advanced options")]
+    min: Option<usize>,
 
     /// Alignment backend. 
     ///
@@ -690,6 +706,15 @@ fn num_cpus() -> usize {
         .unwrap_or(1)
 }
 
+/// Resolve `--min` against the caller `--orig` selects.
+///
+/// The Dfam caller has never gated sparse columns, so it stays off unless the
+/// run asks for it. `--orig` selects the GIRI caller and with it the C++'s
+/// default of 2, which is what a run reaching for `--orig` is reproducing.
+fn occupancy_floor(cli: &Cli) -> usize {
+    cli.min.unwrap_or(if cli.orig { 2 } else { 0 })
+}
+
 /// `MemAvailable` from `/proc/meminfo`, in bytes. `None` off Linux.
 fn available_memory() -> Option<u64> {
     let text = std::fs::read_to_string("/proc/meminfo").ok()?;
@@ -768,11 +793,7 @@ fn write_stockholm<W: Write>(
 ) -> anyhow::Result<()> {
     // `#=GC RF` needs the consensus in the alignment's own column coordinates,
     // not the ungapped form the caller reports.
-    let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
-    let gapped = match params.caller {
-        cons_core::Caller::Dfam => r.msa.consensus(&call),
-        cons_core::Caller::Giri => r.msa.giri_consensus(params.min_non_gap_count),
-    };
+    let gapped = cons_core::gapped_consensus(&r.msa, params);
 
     let mut buf: Vec<u8> = Vec::new();
     dfam_stk_io::msa::write(&r.msa, &mut buf, Some(&r.name), Some(&gapped), false)?;
@@ -1016,11 +1037,7 @@ Kimura {:.2}% (CpG-adjusted {:.2}%)",
 
 /// The gapped consensus for a finished refinement, in the MSA's own columns.
 fn gapped_consensus(r: &cons_core::Refined, params: &Params) -> Vec<u8> {
-    let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
-    match params.caller {
-        cons_core::Caller::Dfam => r.msa.consensus(&call),
-        cons_core::Caller::Giri => r.msa.giri_consensus(params.min_non_gap_count),
-    }
+    cons_core::gapped_consensus(&r.msa, params)
 }
 
 /// One line of family state, printed at the end of every stage so the stages
@@ -1292,10 +1309,7 @@ fn repair_last<A: cons_core::AlignmentSource>(
     refined: cons_core::Refined,
 ) -> anyhow::Result<cons_core::Refined> {
     let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
-    let gapped = match params.caller {
-        cons_core::Caller::Dfam => refined.msa.consensus(&call),
-        cons_core::Caller::Giri => refined.msa.giri_consensus(params.min_non_gap_count),
-    };
+    let gapped = cons_core::gapped_consensus(&refined.msa, params);
     let fixes = cons_core::default_block_source(&refined.msa, matrix, params, &call);
     if fixes.is_empty() {
         if !cli.silent {
@@ -1467,6 +1481,20 @@ fn main() -> Result<()> {
     if seqs.is_empty() {
         bail!("no sequences read from {}", cli.input);
     }
+    // Phase 2 calls over the instance rows with the reference dropped, so a
+    // floor above `seqs.len() - 1` gaps every column and leaves the run nothing
+    // to refine. Checked here because two stages later the same mistake
+    // surfaces as an empty result set, which reads like an alignment problem.
+    let floor = occupancy_floor(&cli);
+    if floor > seqs.len().saturating_sub(1) {
+        bail!(
+            "--min {floor} cannot be met by {} sequence(s): the consensus is called \
+             over the instances with the reference row dropped, so at most {} can \
+             cover a column",
+            seqs.len(),
+            seqs.len().saturating_sub(1)
+        );
+    }
 
     let threads = match backend {
         Backend::Parasail | Backend::Reference => plan_parasail(&seqs, &cli)?,
@@ -1564,7 +1592,7 @@ fn main() -> Result<()> {
             ..Default::default()
         },
         caller: if cli.orig { Caller::Giri } else { Caller::Dfam },
-        min_non_gap_count: cli.min,
+        min_non_gap_count: occupancy_floor(&cli),
         restore_cpg: cli.mam,
         repair_blocks: !cli.no_repair_blocks,
         repair_all_vs_all: true,
@@ -1758,6 +1786,17 @@ tandem array rather than a transposable element",
     }
 
     if results.is_empty() {
+        // Two things empty the result set, and saying only the first sends a
+        // curator to tune the wrong knob.
+        if floor > 0 {
+            bail!(
+                "no consensus could be built from {} sequence(s) — either nothing \
+                 aligned above the minimum score of {}, or `--min {floor}` gapped \
+                 every column",
+                seqs.len(),
+                min_score
+            );
+        }
         bail!(
             "no consensus could be built from {} sequence(s) — nothing aligned above \
              the minimum score of {}",
@@ -1879,6 +1918,20 @@ mod tests {
         assert_eq!(cli.num, 1.0);
         assert_eq!(cli.backend, Backend::Rmblast);
         assert_eq!(cli.format, OutFormat::Ig);
+    }
+
+    /// `--min` reads as the caller's own default until it is given.
+    #[test]
+    fn the_occupancy_floor_follows_the_caller() {
+        let parse = |args: &[&str]| {
+            let mut v = vec!["te-composer", "in.fa"];
+            v.extend_from_slice(args);
+            occupancy_floor(&Cli::try_parse_from(v).unwrap())
+        };
+        assert_eq!(parse(&[]), 0, "the Dfam caller is ungated by default");
+        assert_eq!(parse(&["--orig"]), 2, "--orig restores the C++ default");
+        assert_eq!(parse(&["--min", "3"]), 3);
+        assert_eq!(parse(&["--orig", "--min", "0"]), 0, "an explicit 0 disables it");
     }
 
     #[test]

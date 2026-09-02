@@ -66,9 +66,17 @@ pub struct Params {
     /// Which consensus caller to use.
     pub caller: Caller,
 
-    /// `acons --min`: minimum non-gap residues in a column. Applies only to
-    /// [`Caller::Giri`], matching the C++ where `--min` is documented as
-    /// "applies only with --orig".
+    /// `acons --min`: minimum non-gap residues in a column, below which the
+    /// column is called a gap whatever the scores say.
+    ///
+    /// Both callers honour it, through [`gapped_consensus`], and it binds in
+    /// phase 2 only — phase 1 keeps the reference row and calls with a floor of
+    /// 1, as the C++ does.
+    ///
+    /// 0 disables it, and is the default: the Dfam caller has never gated its
+    /// columns, and turning that on for every run would shorten consensi
+    /// curators have already built and checked without it. `--orig` restores
+    /// the C++'s 2.
     pub min_non_gap_count: usize,
 
     /// Run GIRI's species-aware CpG restoration on the final consensus —
@@ -172,6 +180,54 @@ pub enum Caller {
     Giri,
 }
 
+/// The phase-2 gapped consensus over `msa`, in its own column coordinates.
+///
+/// Both callers drop the reference row and both honour
+/// [`Params::min_non_gap_count`], but they reach the gate differently. GIRI
+/// applies it inside its own argmax, so no candidate ever wins a sparse
+/// column. The Dfam caller has no gate, so [`gate_by_occupancy`] masks what it
+/// called. The orderings differ only where a gated column adjoins a kept one
+/// and the CpG pass had paired the two: GIRI restores CpG after gating and
+/// never sees that pair, while here the CpG pass resolved it before the gate
+/// removed half of it.
+///
+/// Pack insertion spans *after* this, as both phases do. Packing re-derives a
+/// span only where two instances carry sequence across it, so what it puts
+/// back is supported by more than the row the gate was aimed at.
+pub fn gapped_consensus(msa: &MultiAlign, params: &Params) -> Vec<u8> {
+    match params.caller {
+        Caller::Dfam => {
+            let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
+            let mut cons = msa.consensus(&call);
+            gate_by_occupancy(&mut cons, msa, params.min_non_gap_count);
+            cons
+        }
+        Caller::Giri => msa.giri_consensus(params.min_non_gap_count),
+    }
+}
+
+/// Force to a gap every column fewer than `min` rows put a residue in.
+///
+/// Counts what `giri::get_consensus` counts: anything that is neither a gap
+/// nor padding, in either the Dfam or the GIRI convention. Skips the reference
+/// row, as the Dfam call it corrects does. A row that ends before a column
+/// counts as padded there.
+fn gate_by_occupancy(cons: &mut [u8], msa: &MultiAlign, min: usize) {
+    if min == 0 {
+        return;
+    }
+    let rows = &msa.sequences[1.min(msa.sequences.len())..];
+    for (col, c) in cons.iter_mut().enumerate() {
+        let covered = rows
+            .iter()
+            .filter(|r| r.seq.get(col).is_some_and(|&b| !seqmod::is_structural(b)))
+            .count();
+        if covered < min {
+            *c = b'-';
+        }
+    }
+}
+
 impl Default for Params {
     fn default() -> Self {
         Params {
@@ -181,7 +237,7 @@ impl Default for Params {
             consensus: ConsensusParams::default(),
             caller: Caller::Dfam,
             // The C++ default for --min.
-            min_non_gap_count: 2,
+            min_non_gap_count: 0,
             restore_cpg: false,
             repair_blocks: false,
             repair_accept: AcceptRule::default(),
@@ -949,15 +1005,8 @@ pub fn refine<A: AlignmentSource>(
         let norm = mean_score_per_base(&alignments);
         let msa = build_msa(input, seqs, &alignments, params.insertions)?;
         // Phase 2 drops the reference row before calling, and here `--min` does
-        // apply to the GIRI caller.
-        let gapped = match params.caller {
-            Caller::Dfam => {
-                let call =
-                    ConsensusParams { include_reference: false, ..params.consensus.clone() };
-                msa.consensus(&call)
-            }
-            Caller::Giri => msa.giri_consensus(params.min_non_gap_count),
-        };
+        // apply.
+        let gapped = gapped_consensus(&msa, params);
         // Recover inherited insertions before the consensus is read off, so a
         // recovered base joins the reference for the *next* pass rather than
         // waiting for a single post-hoc repair. That compounding is the whole
@@ -1180,10 +1229,7 @@ where
     // The consensus in `first` is ungapped; the repair needs it in the MSA's
     // column coordinates, so re-derive the gapped form from the same MSA.
     let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
-    let gapped = match params.caller {
-        Caller::Dfam => first.msa.consensus(&call),
-        Caller::Giri => first.msa.giri_consensus(params.min_non_gap_count),
-    };
+    let gapped = gapped_consensus(&first.msa, params);
 
     let fixes = block_source(&first.msa, &call);
     if std::env::var_os("TE_COMPOSER_REPAIR_DEBUG").is_some() {
@@ -2370,5 +2416,73 @@ mod refiner_filter_tests {
     #[test]
     fn level_101_keeps_all() {
         assert_eq!(keep(&[(500, 0, 100), (1, 0, 100)], 101), [true, true]);
+    }
+}
+
+/// The occupancy gate, on the shape that motivated it: a reference whose flanks
+/// no other instance reaches.
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+    use aln_core::msa::SequenceRow;
+
+    /// Reference is 15 columns; the three instances cover only the middle five.
+    fn flanked_msa() -> MultiAlign {
+        let row = |n: &str, s: &[u8]| SequenceRow::new(n, s.to_vec());
+        MultiAlign::from_sequences(
+            row("ref", b"ACGTACCTAGCAGTA"),
+            vec![
+                row("i1", b"     CCTAG     "),
+                row("i2", b"     CCTAG     "),
+                row("i3", b"     CCTAG     "),
+            ],
+        )
+        .unwrap()
+    }
+
+    fn params(caller: Caller, min: usize) -> Params {
+        Params { caller, min_non_gap_count: min, ..Params::default() }
+    }
+
+    /// Ungated, the Dfam caller reads the reference's flanks straight out of the
+    /// one row that has them — the whole reason `--min` was wanted here.
+    #[test]
+    fn ungated_the_flanks_survive() {
+        let cons = gapped_consensus(&flanked_msa(), &params(Caller::Dfam, 0));
+        assert_eq!(cons.len(), 15);
+        assert_eq!(seqmod::ungap(&cons).len(), 15);
+    }
+
+    /// A floor of 2 leaves only the columns the instances actually cover.
+    #[test]
+    fn a_floor_of_two_keeps_only_the_covered_span() {
+        for caller in [Caller::Dfam, Caller::Giri] {
+            let cons = gapped_consensus(&flanked_msa(), &params(caller, 2));
+            assert_eq!(cons.len(), 15, "{caller:?} changed the column count");
+            assert_eq!(seqmod::ungap(&cons), b"CCTAG", "{caller:?}");
+        }
+    }
+
+    /// The floor counts rows, so one above the coverage empties the call.
+    #[test]
+    fn a_floor_above_the_coverage_calls_nothing() {
+        for caller in [Caller::Dfam, Caller::Giri] {
+            let cons = gapped_consensus(&flanked_msa(), &params(caller, 4));
+            assert!(seqmod::ungap(&cons).is_empty(), "{caller:?}");
+        }
+    }
+
+    /// Padding and gaps both count as absent, in either convention.
+    #[test]
+    fn gaps_and_padding_alike_leave_a_column_uncovered() {
+        let row = |n: &str, s: &[u8]| SequenceRow::new(n, s.to_vec());
+        let msa = MultiAlign::from_sequences(
+            row("ref", b"ACGTA"),
+            vec![row("i1", b"AC-TA"), row("i2", b"AC.TA"), row("i3", b"AC TA")],
+        )
+        .unwrap();
+        let cons = gapped_consensus(&msa, &params(Caller::Dfam, 1));
+        assert_eq!(cons[2], b'-');
+        assert_eq!(seqmod::ungap(&cons), b"ACTA");
     }
 }
