@@ -131,6 +131,11 @@ pub struct Params {
     /// The all-against-all winner must beat this summed score, so a span whose
     /// instances do not align to one another is left alone.
     pub pack_min_score: i64,
+    /// A span is packed only if at least this fraction of the copies spanning
+    /// it carry bases inside it. 0.5 makes packing consistent with the column
+    /// caller: an insertion most spanning copies carry survives the
+    /// re-alignment that follows, a minority one would not.
+    pub pack_min_occupancy: f64,
     /// Keep bases the re-derivation's centre lacks, so a majority-carried
     /// insertion can survive rather than being projected away.
     pub pack_keep_insertions: bool,
@@ -206,7 +211,7 @@ pub fn gapped_consensus(msa: &MultiAlign, params: &Params) -> Vec<u8> {
     }
 }
 
-/// Force to a gap every column fewer than `min` rows put a residue in.
+/// Force to a gap any column where fewer than `min` rows carry a residue.
 ///
 /// Counts what `giri::get_consensus` counts: anything that is neither a gap
 /// nor padding, in either the Dfam or the GIRI convention. Skips the reference
@@ -244,9 +249,10 @@ impl Default for Params {
             nonredundant_reference_score: true,
             repair_all_vs_all: true,
             pack_insertions: false,
-            pack_max_sep: 2,
+            pack_max_sep: 4,
             pack_min_seg: 5,
             pack_min_score: 0,
+            pack_min_occupancy: 0.5,
             pack_keep_insertions: true,
             repair_threshold: crate::lowqual::THRESHOLD,
             repair_matrix: None,
@@ -1007,31 +1013,40 @@ pub fn refine<A: AlignmentSource>(
         // Phase 2 drops the reference row before calling, and here `--min` does
         // apply.
         let gapped = gapped_consensus(&msa, params);
-        // Recover inherited insertions before the consensus is read off, so a
-        // recovered base joins the reference for the *next* pass rather than
-        // waiting for a single post-hoc repair. That compounding is the whole
-        // argument for doing it here: a longer reference gives the following
-        // round's alignments more to anchor on.
-        let gapped = match (params.pack_insertions, &params.repair_matrix) {
-            (true, Some(mx)) => {
-                let call =
-                    ConsensusParams { include_reference: false, ..params.consensus.clone() };
-                crate::lowqual::pack_insertion_spans(
-                    &msa,
-                    &gapped,
-                    mx,
-                    &call,
-                    params.pack_max_sep,
-                    params.pack_min_seg,
-                    params.pack_min_score,
-                    params.pack_keep_insertions,
-                )
-            }
-            _ => gapped,
-        };
         let next = seqmod::ungap(&gapped);
         Ok((score, norm, msa, gapped, next, instances))
     }
+
+    /// Recover inherited insertions the column caller cannot see, once the
+    /// column-wise loop has settled. Returns the packed consensus.
+    ///
+    /// Packing used to run inside every pass. It re-derived the same spans
+    /// pass after pass and dominated runtime on deep families (13x on 100
+    /// copies x 12 kb at 20% divergence). Packing at the settled point and
+    /// then re-refining keeps what the per-pass version bought — a recovered
+    /// base joins the reference and the copies re-align to it — at one packing
+    /// per round instead of one per pass.
+    fn pack_settled(msa: &MultiAlign, gapped: &[u8], params: &Params) -> Option<Vec<u8>> {
+        let mx = params.repair_matrix.as_ref()?;
+        let call = ConsensusParams { include_reference: false, ..params.consensus.clone() };
+        let packed = crate::lowqual::pack_insertion_spans(
+            msa,
+            gapped,
+            mx,
+            &call,
+            params.pack_max_sep,
+            params.pack_min_seg,
+            params.pack_min_score,
+            params.pack_min_occupancy,
+            params.pack_keep_insertions,
+        );
+        Some(seqmod::ungap(&packed))
+    }
+
+    /// Packing rounds per refinement: pack, re-refine to a fixed point, pack
+    /// again. The second round is for insertions that only become registrable
+    /// once the first round's bases are in the reference.
+    const MAX_PACK_ROUNDS: usize = 2;
 
     /// `acons --mam`. The C++ restores CpG once, on the final pass only,
     /// against the *gapped* consensus and the instance rows (its `maln` has
@@ -1063,7 +1078,12 @@ pub fn refine<A: AlignmentSource>(
     // the flag ran one pass more than it said. Both had to move together: with
     // an exclusive range the old test never fires and the loop falls through.
     let budget = params.iterations.max(1);
-    for pass_idx in 0..budget {
+    let mut pass_idx = 0usize;
+    // Passes since the last packing round. The budget is per round, so a
+    // packed reference gets a full loop to settle.
+    let mut since_pack = 0usize;
+    let mut pack_rounds = 0usize;
+    loop {
         if current.is_empty() {
             return Ok(None);
         }
@@ -1086,9 +1106,24 @@ pub fn refine<A: AlignmentSource>(
         let converged = next == current.seq;
         // A fixed point is the 1-cycle; `seen` catches the longer ones.
         let cycled = !converged && seen.contains(&next);
-        let exhausted = pass_idx + 1 == budget;
+        let exhausted = since_pack + 1 >= budget;
 
         if converged || cycled || exhausted {
+            // The column caller has settled; now recover what it cannot see.
+            // A packed consensus that the next loop does not reproduce is
+            // dropped by that loop, so what is emitted is always a fixed point
+            // of the column caller.
+            if params.pack_insertions && pack_rounds < MAX_PACK_ROUNDS {
+                if let Some(packed) = pack_settled(&msa, &gapped, params) {
+                    if packed != next && !seen.contains(&packed) {
+                        pack_rounds += 1;
+                        since_pack = 0;
+                        pass_idx += 1;
+                        current = Sequence::new(name, packed);
+                        continue;
+                    }
+                }
+            }
             let stop = if converged {
                 StopReason::Converged
             } else if cycled {
@@ -1111,8 +1146,9 @@ pub fn refine<A: AlignmentSource>(
             }));
         }
         current = Sequence::new(name, next);
+        pass_idx += 1;
+        since_pack += 1;
     }
-    unreachable!("the loop returns on its final pass")
 }
 
 /// Refine, repair low-quality blocks, then refine again.

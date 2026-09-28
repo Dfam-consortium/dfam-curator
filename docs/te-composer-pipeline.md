@@ -91,7 +91,7 @@ extend — because te-composer is a port of it. The differences that matter:
 | 2 | **DUST low-complexity masking is on.** Measured on 647 simulated families with known ancestors: mean distance to truth improves from 188.3 to 182.0, and the paired sign test against Refiner flips from losing (p = 0.0002) to winning (p = 0.0058). Costs 0.7% of HSPs on a well-behaved family | Emits `-dust no` unconditionally. Its `NCBIBlastSearchEngine` constructor calls `setUseDustSeg(1)`, but `getUseDustSeg` is never read when building the command line, so the setting is dead and masking is always off |
 | 3 | **Phase 1 (reference selection).** No cull. The aligner runs an all-vs-all search with mask level off; te-composer splits each instance's HSPs by strand, trims each strand so that strand's **instance** ranges do not overlap (dropping anything left under `--min-row-len`, 25 bp), sums the **trimmed** scores per strand, and keeps the higher-scoring tiling. A candidate's score is then the plain sum of those surviving trimmed scores — the same quantity phase 2 sums, so one convention serves both. That same surviving set becomes the MSA rows | **Phase 1 (reference selection).** The all-vs-all search sets no mask level (rmblastn's `-1`, off); `findHighestScoringAlignmentSet` culls at 80% on the **reference** axis within each strand. **One surviving set then does both jobs** — summed raw to score the candidate, and handed to `MultAln` as the rows. Nothing reconsiders strand afterwards, so an instance that aligned in both orientations contributes both; and because the cull is pairwise, its overlapping fragments can credit the same reference bases more than once |
 | 4 | **Phase 2 (MHSP selection).** The same rule as #3, applied to the instance-vs-reference search: no cull, trim each strand into a tiling, sum the trimmed scores, keep the better tiling. There is no candidate scoring here — the surviving set *is* the MSA. Reference overlap is deliberately left unbounded. Every row of an instance is on one strand, and no instance base appears in more than one row | **Phase 2 (MHSP selection).** rmblastn culls during the search (`-mask_level 80`): an HSP is dropped when more than 80% of its **instance** range is covered by a single higher-scoring HSP, strand ignored. Nothing filters afterwards. Survivors' instance bases may overlap by up to 80%, and one instance may produce rows on both strands |
-| 5 | **Insertion packing, inside every refinement pass.** A consensus-induced MSA never aligns one instance's inserted bases to another's, so an insertion inherited by many instances stays invisible to the consensus caller however many passes run. te-composer finds each run of consensus-gap columns, merges runs separated by two called columns or fewer (`--pack-max-sep`), and collects what the instances inserted there. Those fragments are aligned **all-against-all**; the one scoring highest against the rest becomes the centre, the others are aligned to it, and a consensus is called from that small MSA. It replaces the span only if it is **longer** than what is there now — this recovers bases the column-wise caller cannot see rather than relitigating ones it already called. A base recovered this way joins the reference for the next pass. On by default (`--no-pack-insertions` disables) | **No equivalent.** `MultAln::_alignFromSearchResultCollection` reserves the widest insertion seen at each reference position, then **left-justifies** each instance's inserted bases in that block and pads the remainder with gaps on the right. The bases are never compared across instances, so whatever shares a column does so because the insertions happen to start at the same offset, not because they were aligned |
+| 5 | **Insertion packing, once the refinement loop has settled.** A consensus-induced MSA never aligns one instance's inserted bases to another's, so an insertion inherited by many instances stays invisible to the consensus caller however many passes run. When the column-wise loop converges, te-composer finds each run of consensus-gap columns, merges neighbouring runs while the span holds at most four called columns (`--pack-max-sep`), and keeps the spans where at least half of the spanning copies carry bases (`--pack-min-occupancy`). For each, the copies' bases are scored **all-against-all**; the one scoring highest against the rest becomes the centre, the others are aligned to it, and a consensus is called from that small MSA. It replaces the span only if it has **more called bases** than what is there now — this recovers bases the column-wise caller cannot see rather than relitigating ones it already called. The recovered bases join the reference and the loop runs again, at most twice. On by default (`--no-pack-insertions` disables) | **No equivalent.** `MultAln::_alignFromSearchResultCollection` reserves the widest insertion seen at each reference position, then **left-justifies** each instance's inserted bases in that block and pads the remainder with gaps on the right. The bases are never compared across instances, so whatever shares a column does so because the insertions happen to start at the same offset, not because they were aligned |
 | 6 | Stops on any repeated consensus (cycle detection) | Stops only when a pass reproduces the previous consensus exactly |
 | 7 | Up to **20** passes per refinement round; the loop also stops on a cycle (#6) | **11**, not 10: `$maxIterations = 10` but the loop is `for ($i = 0; $i <= $maxIterations; $i++)` |
 | 8 | Extension is an in-process library call | Shells out to the `RAMExtend` binary |
@@ -611,9 +611,9 @@ Only one of them is on by default.
 
 | | Block repair | Insertion packing |
 |---|---|---|
-| **Runs** | **Once**, between two refinement runs | **Every refinement pass** |
+| **Runs** | **Once**, between two refinement runs | **When the refinement loop settles**, then the loop runs again; at most two rounds |
 | **Fixes** | Stretches where the consensus disagrees with its instances, usually a length disagreement | Insertions carried by many instances that a consensus-induced MSA never aligns to one another |
-| **Judged by** | Accept gate — kept only if the total alignment score improves | No gate; each span must beat `--pack-min-score` and clear an occupancy filter |
+| **Judged by** | Accept gate — kept only if the total alignment score improves | No score gate; a span is packed only if at least half of the spanning copies carry bases in it (`--pack-min-occupancy`), the centre aligns positively to the rest (`--pack-min-score`), and the result has more called bases than the span holds. The loop that follows keeps a packed base only if the re-aligned copies support it |
 | **Comes from** | Refiner's `resolveLowQualityBlocks`, plus `AutoRunBlocker`'s window | New. No Refiner equivalent |
 | **Default** | **On** | **On** — disable with `--no-pack-insertions` |
 
@@ -828,10 +828,34 @@ this does and why it ships. Disable it with `--no-pack-insertions`.
 `--pack-insertions` is still accepted and ignored, so scripts that switched it
 on explicitly keep working.
 
-The knobs are `--pack-max-sep` (merge gap runs separated by at most this many
-called columns, default 2), `--pack-min-seg` (a span needs one instance
-contributing at least this many bases, default 5), `--pack-min-score` (the
-all-against-all winner must beat this summed score, default 0).
+The knobs are `--pack-max-sep` (merge neighbouring gap runs while the span
+holds at most this many called columns in total, default 4), `--pack-min-seg` (a span needs one instance
+contributing at least this many bases, default 5), `--pack-min-occupancy` (the
+fraction of copies spanning the region that must carry bases in it, default
+0.5), `--pack-min-score` (the all-against-all winner must beat this summed
+score, default 0).
+
+**Why packing waits for the loop to settle, and why the occupancy gate.**
+Packing originally ran inside every pass with no occupancy gate: any four
+copies with a shared insertion qualified, and each qualifying span cost an
+all-against-all alignment with traceback. Two things followed. Any consensus-gap
+span that four copies happened to fill was re-derived, so an insertion carried
+by 5 of 15 spanning copies was written into the consensus that the column
+caller had correctly declined. And the work grew with the number of private
+insertions times the square of the copy number, pass after pass: on a
+100-copy, 12 kb family at 20% divergence packing took about 60 s per pass and
+the run 374 s against 27 s without it. Measured 2026-09-12; the earlier
+estimate of a 16% cost came from shallower families.
+
+Packing now runs when the column-wise loop has converged, cycled, or spent its
+budget. te-composer keeps a span only when at least half of the spanning copies
+carry bases in it, the same majority the column caller demands once the copies
+are re-aligned to the packed reference. It picks the centre on score-only
+alignments and runs one traceback per member. If packing changed the
+consensus, the loop runs again from it with a fresh pass budget; what is
+emitted is therefore always a fixed point of the column caller, and a packed
+base survives only if the re-aligned copies support it. At most two packing
+rounds run per refinement.
 
 ---
 

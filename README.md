@@ -304,6 +304,15 @@ OPTIONS:
                                    already occupied by an earlier sequence in the file.
                                    Kept sequences are assigned to the first unoccupied hit.
                                    Removed sequences are reported as "removed_remapped_duplicate"
+    -c, --remove-contained       Remove records whose span sits inside another record's
+                                   span (strand ignored). Identical spans keep the
+                                   earliest record. Reported as "removed_contained"
+    -M, --merge-overlapping      Fold each run of overlapping records into one record,
+                                   re-extracted from the reference over the union span.
+                                   Reported as "merged_overlapping"
+    --merge-min-overlap <N>      Overlap needed to join a merge cluster: 1 or more is a
+                                   base-pair count, between 0 and 1 is a fraction of the
+                                   shorter span [default: 1]
 ```
 
 ### Coordinate validation
@@ -324,7 +333,10 @@ reference genome and attempts common repairs:
 When `-m` is set, sequences that remain unresolved after coordinate checking
 are searched against the reference genome. The best match is chosen by:
 
-1. Non-redundancy — avoids a location already occupied by another sequence in the set
+1. Non-redundancy — avoids a location already occupied by another sequence in the set.
+   The test is exact: it compares whole `(sequence_id, start, end, orient)` tuples, so it
+   steers around a hit only when some record already sits on that same span. `-c` and `-M`
+   below handle nested and partially overlapping placements
 2. Proximity — prefers the same chromosome and start coordinate closest to the original
 3. Uniqueness — reports `fixed_remapped_unique` or `fixed_remapped_ambig`
 
@@ -334,6 +346,59 @@ position.
 
 Aho-Corasick (default) searches both strands in a single genome pass;
 Boyer-Moore (`--boyer-moore`) searches each strand separately.
+
+### Interval redundancy (`-c`, `-M`)
+
+Because the occupancy test above is exact, records that nest inside one another
+or overlap partially pass straight through it. Tiled discovery output is mostly
+this kind of redundancy. A RepeatScout family is a staircase of windows stepping
+across each locus, and every window is a distinct span.
+
+After validation and mapping, discoord groups the records whose coordinates
+resolved by (input file, reference sequence) and measures containment and
+overlap inside each group. It ignores strand, since the same bases are redundant
+whichever way round they were written. Separate input files never interact, so
+you can pass several families in one invocation.
+
+discoord counts and reports these whether or not you act on them:
+
+```
+## o Intervals: 100 record(s) with coordinates in 6 group(s)
+##     Overlapping pairs: 577
+##     Contained records: 67 (reported only)
+##     Merge clusters: 9 covering 99 record(s) (reported only)
+```
+
+`-l per-record` adds a line per containment and per cluster.
+
+`-c` (`--remove-contained`) drops records whose span sits inside another's and
+reports them as `removed_contained`. Identical spans are the degenerate case of
+containment, so discoord keeps the earliest record in the file.
+
+`-M` (`--merge-overlapping`) folds each run of mutually overlapping records into
+a single record, re-extracting its sequence from the reference over the union
+span. The longest member of a cluster sets the orientation and keeps its
+description; it is reported as `merged_overlapping` and the records it absorbs
+as `removed_merged`. Overlap is measured against the cluster's running span, so
+a run of tiled windows stays one cluster.
+
+`--merge-min-overlap` sets how much two records must share before they join a
+cluster. A value of 1 or more is a base-pair count; a value between 0 and 1 is a
+fraction of the shorter span. The default of `1` merges on any overlap at all.
+Raise it if adjacent elements in your set brush against each other.
+
+Merging discards alignment columns. On Stockholm input the merged rows are
+written ungapped, the result is no longer a valid MSA, and discoord says so.
+
+The two flags are independent, and combining them does not move the union span:
+a contained record contributes no bases its container does not already hold. On
+a tiled RepeatScout family, 100 records collapse to the 10 loci they cover:
+
+```
+$ discoord -m -M -r genome.2bit family-1.fa -o out
+##     Merge clusters: 9 covering 99 record(s) (9 merged record(s) written)
+     Merged Records: 9 (absorbing 90 others)
+```
 
 ### Output identifiers (`-o`)
 

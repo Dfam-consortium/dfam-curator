@@ -330,6 +330,30 @@ fn block_sequences(msa: &MultiAlign, start: usize, end: usize) -> (usize, Vec<Ve
     (ref_len, inst)
 }
 
+
+/// Debug: dump a candidate block's rows in alignment columns when
+/// `TE_COMPOSER_BLOCK_LOG` is set. `source` names the selection, `outcome`
+/// what became of the block, `repl` the replacement if any.
+fn log_block(msa: &MultiAlign, source: &str, start: usize, end: usize, outcome: &str, repl: Option<&[u8]>) {
+    if std::env::var_os("TE_COMPOSER_BLOCK_LOG").is_none() {
+        return;
+    }
+    let slice = |row: &aln_core::msa::SequenceRow| -> String {
+        String::from_utf8_lossy(&row.seq[start..=end.min(row.seq.len().saturating_sub(1))]).into_owned()
+    };
+    eprintln!(
+        "BLOCK\t{source}\t{start}\t{end}\t{outcome}\t{}",
+        repl.map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default()
+    );
+    if let Some(r) = msa.sequences.first() {
+        eprintln!("BLOCKROW\tconsensus\t{}", slice(r));
+    }
+    for row in msa.sequences.iter().skip(1) {
+        let spans = start >= row.col_start && end < row.col_end;
+        eprintln!("BLOCKROW\t{}\t{}\t{}", row.name, slice(row), if spans { "spans" } else { "partial" });
+    }
+}
+
 /// Find repairs for every low-quality block.
 ///
 /// For each block, the instances' *ungapped* lengths are histogrammed. When the
@@ -476,23 +500,50 @@ pub fn resolve_by_all_vs_all_opt(
     params: &ConsensusParams,
     keep_insertions: bool,
 ) -> Option<(Vec<u8>, usize, i64, i64)> {
-    use aln_engine::{AlignMode, AlignParams, PairwiseAligner};
+    let (score_aligner, tb_aligner) = pack_aligners(matrix, gap_open, gap_extend)?;
+    resolve_by_all_vs_all_with(inst, &score_aligner, &tb_aligner, params, keep_insertions)
+}
+
+/// The two aligners a centre-star needs: a score-only one for the
+/// all-against-all that picks the centre, and one with traceback for laying
+/// each member out against it. Built once per caller so a pass over thousands
+/// of spans does not rebuild a parasail profile for every span.
+pub fn pack_aligners(
+    matrix: &SubstMatrix,
+    gap_open: u32,
+    gap_extend: u32,
+) -> Option<(crate::FastAligner, crate::FastAligner)> {
+    use aln_engine::{AlignMode, AlignParams};
+    let mk = |traceback: bool| {
+        let p = AlignParams {
+            mode: AlignMode::Global,
+            gap_open,
+            gap_extend,
+            // A short block can align end-to-end at a negative score and still
+            // be the right answer; the floor exists to keep junk out of a
+            // genome-scale search, which is not what is happening here.
+            min_score: i32::MIN / 4,
+            traceback,
+            bandwidth: None,
+        };
+        crate::FastAligner::new(matrix.clone(), p).ok()
+    };
+    Some((mk(false)?, mk(true)?))
+}
+
+/// As [`resolve_by_all_vs_all_opt`], with the aligners supplied.
+pub fn resolve_by_all_vs_all_with(
+    inst: &[Vec<u8>],
+    score_aligner: &crate::FastAligner,
+    tb_aligner: &crate::FastAligner,
+    params: &ConsensusParams,
+    keep_insertions: bool,
+) -> Option<(Vec<u8>, usize, i64, i64)> {
+    use aln_engine::PairwiseAligner;
 
     if inst.len() < MIN_INSTANCES {
         return None;
     }
-    let p = AlignParams {
-        mode: AlignMode::Global,
-        gap_open,
-        gap_extend,
-        // A short block can align end-to-end at a negative score and still be
-        // the right answer; the floor exists to keep junk out of a genome-scale
-        // search, which is not what is happening here.
-        min_score: i32::MIN / 4,
-        traceback: true,
-        bandwidth: None,
-    };
-    let aligner = crate::FastAligner::new(matrix.clone(), p).ok()?;
     let seqs: Vec<aln_core::Sequence> = inst
         .iter()
         .enumerate()
@@ -506,8 +557,10 @@ pub fn resolve_by_all_vs_all_opt(
             if i == j {
                 continue;
             }
-            if let Ok(Some(al)) = aligner.align(&seqs[i], &seqs[j]) {
-                total[i] += al.score as i64;
+            // Score only: the centre is chosen on summed score, and a traceback
+            // for every pair was the single largest cost of packing.
+            if let Ok(Some(sc)) = score_aligner.score(&seqs[i], &seqs[j]) {
+                total[i] += sc as i64;
             }
         }
     }
@@ -529,7 +582,7 @@ pub fn resolve_by_all_vs_all_opt(
             inserts.push(vec![Vec::new(); clen + 1]);
             continue;
         }
-        let Ok(Some(al)) = aligner.align(q, &seqs[best]) else { continue };
+        let Ok(Some(al)) = tb_aligner.align(q, &seqs[best]) else { continue };
         let Ok((gq, gs)) = al.gapped(&q.seq, &seqs[best].seq) else { continue };
         let mut b = vec![b'-'; clen];
         let mut ins = vec![Vec::new(); clen + 1];
@@ -650,6 +703,7 @@ pub fn pack_insertion_spans(
     max_sep: usize,
     min_seg: usize,
     min_score: i64,
+    min_occupancy: f64,
     keep_insertions: bool,
 ) -> Vec<u8> {
     let is_gap = |x: u8| seqmod::is_gap(x) || x == b' ';
@@ -659,6 +713,9 @@ pub fn pack_insertion_spans(
     }
     let (go, ge) = scaled_gap_penalties(matrix);
     let (go, ge) = (go.abs().round() as u32, ge.abs().round() as u32);
+    let Some((score_aligner, tb_aligner)) = pack_aligners(matrix, go, ge) else {
+        return gapped.to_vec();
+    };
 
     // Maximal gap runs, then merged while the separation is short enough.
     let mut runs: Vec<(usize, usize)> = Vec::new();
@@ -674,16 +731,65 @@ pub fn pack_insertion_spans(
         }
         runs.push((start, col - 1));
     }
+    // Merge while the span as a whole holds at most `max_sep` called columns.
+    // Merging on the separation alone chained runs across the whole alignment
+    // at high divergence, where the consensus has a gap column every few
+    // positions: spans of 30-190 columns in which every copy had 40+ bases,
+    // 6.7 million pairwise alignments per pass on one 100-copy family.
     let mut spans: Vec<(usize, usize)> = Vec::new();
+    let mut called_in_span = 0usize;
     for r in runs {
         match spans.last_mut() {
-            Some(prev) if r.0.saturating_sub(prev.1 + 1) <= max_sep => prev.1 = r.1,
-            _ => spans.push(r),
+            Some(prev) if called_in_span + r.0.saturating_sub(prev.1 + 1) <= max_sep => {
+                called_in_span += r.0.saturating_sub(prev.1 + 1);
+                prev.1 = r.1;
+            }
+            _ => {
+                spans.push(r);
+                called_in_span = 0;
+            }
         }
     }
 
     let mut out = gapped.to_vec();
+    let stats = std::env::var_os("TE_COMPOSER_PACK_LOG").is_some();
+    let (mut n_spans, mut n_aligned, mut n_pairs, mut n_bases, mut n_packed) = (0usize, 0usize, 0usize, 0usize, 0usize);
+    let n_spans_total = spans.len();
     for (a, b) in spans {
+        n_spans += 1;
+        // Copies spanning the whole span, whether or not they carry bases in it.
+        let spanning = msa
+            .sequences
+            .iter()
+            .skip(1)
+            .filter(|r| r.col_start <= a && r.col_end > b)
+            .count();
+        // Which copies carry *inserted* bases here: bases in columns where the
+        // consensus has none. Bases in the span's called columns are what every
+        // copy has and say nothing about the insertion.
+        let carriers = msa
+            .sequences
+            .iter()
+            .skip(1)
+            .filter(|r| r.col_start <= a && r.col_end > b)
+            .map(|r| {
+                (a..=b)
+                    .filter(|&c| is_gap(gapped[c]) && !is_gap(r.seq[c]))
+                    .count()
+            })
+            .filter(|&n| n > 0)
+            .collect::<Vec<usize>>();
+        if carriers.len() < 2 || carriers.iter().copied().max().unwrap_or(0) < min_seg {
+            continue;
+        }
+        // Occupancy gate, measured against the copies that span the region:
+        // an insertion the consensus should carry is one most spanning copies
+        // carry. Without it any four copies with a shared private insertion
+        // qualified, which both promoted minority insertions into the consensus
+        // and made packing quadratic in copies over thousands of private spans.
+        if (carriers.len() as f64) < min_occupancy * spanning as f64 {
+            continue;
+        }
         // What each instance carries across the span, ungapped.
         let inst: Vec<Vec<u8>> = msa
             .sequences
@@ -699,11 +805,16 @@ pub fn pack_insertion_spans(
             })
             .filter(|s: &Vec<u8>| !s.is_empty())
             .collect();
-        if inst.len() < 2 || inst.iter().map(|s| s.len()).max().unwrap_or(0) < min_seg {
+        if inst.len() < 2 {
             continue;
         }
+        if inst.len() >= MIN_INSTANCES {
+            n_aligned += 1;
+            n_pairs += inst.len() * (inst.len() - 1) + inst.len();
+            n_bases += inst.iter().map(|s| s.len()).sum::<usize>();
+        }
         let Some((cons, winner, wscore, rscore)) =
-            resolve_by_all_vs_all_opt(&inst, matrix, go, ge, call, keep_insertions)
+            resolve_by_all_vs_all_with(&inst, &score_aligner, &tb_aligner, call, keep_insertions)
         else {
             continue;
         };
@@ -749,10 +860,20 @@ pub fn pack_insertion_spans(
                 wscore,
                 rscore
             );
+            eprintln!("PACKROW\tconsensus\t{}", String::from_utf8_lossy(&gapped[a..=b]));
+            for row in msa.sequences.iter().skip(1).filter(|r| r.col_start <= a && r.col_end > b) {
+                eprintln!("PACKROW\t{}\t{}", row.name, String::from_utf8_lossy(&row.seq[a..=b]));
+            }
         }
+        n_packed += 1;
         for (k, col) in (a..=b).enumerate() {
             out[col] = cons.get(k).copied().unwrap_or(b'-');
         }
+    }
+    if stats {
+        eprintln!(
+            "PACKSTATS\tspans={n_spans_total}\tvisited={n_spans}\taligned={n_aligned}\tpairwise_alignments={n_pairs}\tsegment_bases={n_bases}\tpacked={n_packed}"
+        );
     }
     out
 }
@@ -840,8 +961,19 @@ pub fn resolve_given_blocks(
         if existing.iter().any(clash) || out.iter().any(clash) {
             continue;
         }
-        if let ModalOutcome::Fixed(cons) = resolve_modal_length(msa, start, end, params) {
-            out.push(BlockFix { start, end, cons });
+        match resolve_modal_length(msa, start, end, params) {
+            ModalOutcome::Fixed(cons) => {
+                log_block(msa, "window", start, end, "fixed", Some(&cons));
+                out.push(BlockFix { start, end, cons });
+            }
+            other => {
+                let tag = match other {
+                    ModalOutcome::TooFew => "too-few",
+                    ModalOutcome::AlreadyAgrees => "already-agrees",
+                    _ => "no-majority",
+                };
+                log_block(msa, "window", start, end, tag, None);
+            }
         }
     }
     out
@@ -858,28 +990,42 @@ where
     F: FnMut(&[Vec<u8>]) -> Option<Vec<u8>>,
 {
     let debug = std::env::var_os("TE_COMPOSER_REPAIR_DEBUG").is_some();
-    let (mut n_wide, mut n_few, mut n_same, mut n_nomajority) = (0, 0, 0, 0);
+    let (mut n_narrow, mut n_wide, mut n_few, mut n_same, mut n_nomajority) = (0, 0, 0, 0, 0);
+    let mut wide_widths: Vec<usize> = Vec::new();
     let mut fixes = Vec::new();
     for (start, end) in low_scoring_columns(msa, matrix, threshold) {
         let width = end - start + 1;
-        if width < MIN_BLOCK || width > MAX_BLOCK {
+        if width < MIN_BLOCK {
+            n_narrow += 1;
+            continue;
+        }
+        if width > MAX_BLOCK {
             n_wide += 1;
+            wide_widths.push(width);
             continue;
         }
 
         let cons = match resolve_modal_length(msa, start, end, params) {
-            ModalOutcome::Fixed(c) => c,
+            ModalOutcome::Fixed(c) => {
+                log_block(msa, "ruzzo-tompa", start, end, "fixed-modal", Some(&c));
+                c
+            }
             ModalOutcome::TooFew => {
                 n_few += 1;
+                log_block(msa, "ruzzo-tompa", start, end, "too-few", None);
                 continue;
             }
             ModalOutcome::AlreadyAgrees => {
                 n_same += 1;
+                log_block(msa, "ruzzo-tompa", start, end, "already-agrees", None);
                 continue;
             }
             ModalOutcome::NoMajority { inst } => match align_block.as_mut() {
                 Some(f) => match f(&inst) {
-                    Some(c) => c,
+                    Some(c) => {
+                        log_block(msa, "ruzzo-tompa", start, end, "fixed-centre-star", Some(&c));
+                        c
+                    }
                     None => continue,
                 },
                 None => {
@@ -892,10 +1038,12 @@ where
         fixes.push(BlockFix { start, end, cons });
     }
     if debug {
+        wide_widths.sort_unstable();
         eprintln!(
-            "repair-blocks: rejected wide={n_wide} too-few-instances={n_few} \
-             already-agrees={n_same} no-majority={n_nomajority} -> {} fixes",
-            fixes.len()
+            "repair-blocks: rejected narrow={n_narrow} wide={n_wide} too-few-instances={n_few} \
+             already-agrees={n_same} no-majority={n_nomajority} -> {} fixes; wide widths {:?}",
+            fixes.len(),
+            wide_widths
         );
     }
     fixes

@@ -3,7 +3,7 @@ use dfam_coord::{
     derive_assembly_name, detect_format_and_compression, find_reference_file, init_thread_pool,
     load_reference, output_results, parse_delimited_file, parse_fasta, parse_stockholm,
     process_sequences, write_delimited_output, write_fasta_output, write_stockholm_output,
-    LogLevel, SequenceRecord,
+    IntervalOptions, LogLevel, SequenceRecord,
 };
 use std::collections::HashMap;
 use std::env;
@@ -54,6 +54,30 @@ struct Args {
     /// Removed sequences are reported as "removed_remapped_duplicate" in the summary.
     #[arg(short = 'u', long, default_value = "false")]
     remove_duplicates: bool,
+
+    /// Remove records whose span sits entirely inside another record's span.
+    /// Strand is ignored: the same bases are redundant whichever way round they
+    /// were written.  Where spans are identical the earliest record is kept.
+    /// Removed records are reported as "removed_contained" in the summary.
+    /// Containment is counted and reported with or without this flag.
+    #[arg(short = 'c', long, default_value = "false")]
+    remove_contained: bool,
+
+    /// Fold each run of mutually overlapping records into a single record whose
+    /// sequence is re-extracted from the reference over the union span.  The
+    /// longest member of a cluster sets the orientation and keeps its
+    /// description.  Merging discards alignment columns, so Stockholm output
+    /// from a merged run is no longer a valid MSA.
+    /// Overlaps and the clusters they would form are reported with or without
+    /// this flag.
+    #[arg(short = 'M', long, default_value = "false")]
+    merge_overlapping: bool,
+
+    /// Overlap two records must share to join the same merge cluster.  A value
+    /// of 1 or more is a base-pair count; a value between 0 and 1 is a fraction
+    /// of the shorter span.  Only meaningful with -M.
+    #[arg(long, default_value = "1", value_name = "BP_OR_FRACTION")]
+    merge_min_overlap: f64,
 }
 
 fn main() {
@@ -80,6 +104,18 @@ fn main() {
     if args.map_sequences {
         let method = if args.boyer_moore { "boyer-moore" } else { "aho-corasick" };
         println!("## Mapping method: {}", method);
+    }
+
+    let intervals = IntervalOptions {
+        remove_contained: args.remove_contained,
+        merge_overlapping: args.merge_overlapping,
+        min_overlap: args.merge_min_overlap,
+    };
+    if args.remove_contained || args.merge_overlapping {
+        println!(
+            "## Intervals: remove_contained={}, merge_overlapping={}, merge_min_overlap={}",
+            args.remove_contained, args.merge_overlapping, args.merge_min_overlap
+        );
     }
 
     let mut sequences_by_assembly: HashMap<Option<String>, Vec<SequenceRecord>> = HashMap::new();
@@ -164,7 +200,7 @@ fn main() {
                 std::process::exit(1);
             });
             println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
-            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates);
+            let mut results = process_sequences(sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates, &intervals, &args.log_level);
             for record in results.iter_mut() {
                 if record.validated.is_none() {
                     record.validated = Some("invalid".to_string());
@@ -186,7 +222,7 @@ fn main() {
         });
         println!("{} sequences loaded in {:.1}s", genome_map.len(), t.elapsed().as_secs_f32());
         let all_sequences: Vec<SequenceRecord> = sequences_by_assembly.into_values().flatten().collect();
-        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates);
+        let mut results = process_sequences(all_sequences, &genome_map, args.map_sequences, !args.boyer_moore, debug_mode, Some(assembly_name.as_str()), args.remove_duplicates, &intervals, &args.log_level);
         for record in results.iter_mut() {
             if record.validated.is_none() {
                 record.validated = Some("invalid".to_string());
@@ -246,7 +282,14 @@ fn main() {
         if args.output_dir.is_some() && !output_file.is_empty() {
             let output_records: Vec<SequenceRecord> = records
                 .iter()
-                .filter(|r| r.validated.as_deref() != Some("removed_remapped_duplicate"))
+                .filter(|r| {
+                    !matches!(
+                        r.validated.as_deref(),
+                        Some("removed_remapped_duplicate")
+                            | Some("removed_contained")
+                            | Some("removed_merged")
+                    )
+                })
                 .cloned()
                 .collect();
             match format {

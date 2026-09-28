@@ -279,14 +279,17 @@ struct Cli {
     /// Packing is on by default. A consensus-induced MSA never aligns one
     /// instance's inserted bases to another's, so an insertion inherited by many
     /// instances is invisible to the consensus caller however many passes run.
-    /// Re-deriving those spans inside each pass lets a recovered base join the
-    /// reference for the next one, which compounds. Measured to help against
-    /// known ancestors and to be roughly neutral on curated hs1 families.
+    /// Once the column-wise loop has settled, spans where at least
+    /// `--pack-min-occupancy` of the spanning copies carry bases are re-derived
+    /// from those copies, the recovered bases join the reference, and the loop
+    /// runs again; at most two such rounds. Measured to help against known
+    /// ancestors and to be roughly neutral on curated hs1 families.
     #[arg(long, default_value_t = false, help_heading = "Advanced options")]
     no_pack_insertions: bool,
 
-    /// Merge gap runs separated by at most this many called columns.
-    #[arg(long, default_value_t = 2, hide = true, help_heading = "Advanced options")]
+    /// Merge neighbouring gap runs into one span while the span holds at most
+    /// this many called columns in total.
+    #[arg(long, default_value_t = 4, hide = true, help_heading = "Advanced options")]
     pack_max_sep: usize,
 
     /// A span needs one instance contributing at least this many bases.
@@ -297,6 +300,11 @@ struct Cli {
     /// re-derived. 0 means it must align positively to the other instances.
     #[arg(long, default_value_t = 0, hide = true, help_heading = "Advanced options")]
     pack_min_score: i64,
+
+    /// A span is packed only if at least this fraction of the copies spanning
+    /// it carry bases inside it.
+    #[arg(long, default_value_t = 0.5, hide = true, help_heading = "Advanced options")]
+    pack_min_occupancy: f64,
 
     /// Genome the input sequences were taken from, as a 2bit -- for automated extension.
     ///
@@ -431,8 +439,7 @@ struct Cli {
     #[arg(long, help_heading = "Advanced options")]
     orig: bool,
 
-    /// Call a gap in any alignment column fewer than N instances put a
-    /// residue in.
+    /// Minimum occupancy for a column to call a residue.
     ///
     /// `acons --min`. Use it to stop a consensus running out into sequence
     /// only one instance supports: flanks added around each copy before
@@ -442,9 +449,10 @@ struct Cli {
     /// that one instance; phase 2 then aligns it back to itself and converges.
     /// A floor of 2 breaks that loop.
     ///
-    /// Default 0, off, except under `--orig`, which restores the C++'s 2. Both
-    /// callers honour it. It binds in phase 2 only: phase 1 keeps the reference
-    /// row and calls with a floor of 1, as the C++ does.
+    /// Defaults to 1 for the Dfam caller and to 2 for the GIRI caller `--orig`
+    /// selects, which is the C++'s default. Both callers honour it. It binds in
+    /// phase 2 only: phase 1 keeps the reference row and calls with a floor of
+    /// 1, as the C++ does.
     ///
     /// Insertion packing runs after the gate and needs two instances carrying
     /// sequence across a span before it re-derives one, so a value above 2 gates
@@ -708,11 +716,15 @@ fn num_cpus() -> usize {
 
 /// Resolve `--min` against the caller `--orig` selects.
 ///
-/// The Dfam caller has never gated sparse columns, so it stays off unless the
-/// run asks for it. `--orig` selects the GIRI caller and with it the C++'s
-/// default of 2, which is what a run reaching for `--orig` is reproducing.
+/// A floor of 1 means one instance has to cover the column. That changes one
+/// case: where the phase-1 reference spans a column no instance reaches, the
+/// Dfam caller sees an empty profile, ties every candidate, and breaks the tie
+/// towards `N`. The floor gaps those columns instead.
+///
+/// `--orig` selects the GIRI caller and with it the C++'s default of 2, which
+/// is what a run reaching for `--orig` is reproducing.
 fn occupancy_floor(cli: &Cli) -> usize {
-    cli.min.unwrap_or(if cli.orig { 2 } else { 0 })
+    cli.min.unwrap_or(if cli.orig { 2 } else { 1 })
 }
 
 /// `MemAvailable` from `/proc/meminfo`, in bytes. `None` off Linux.
@@ -1600,6 +1612,7 @@ fn main() -> Result<()> {
         pack_max_sep: cli.pack_max_sep,
         pack_min_seg: cli.pack_min_seg,
         pack_min_score: cli.pack_min_score,
+        pack_min_occupancy: cli.pack_min_occupancy,
         pack_keep_insertions: true,
         repair_threshold: cli.repair_threshold,
         repair_window: cli.repair_window,
@@ -1928,7 +1941,7 @@ mod tests {
             v.extend_from_slice(args);
             occupancy_floor(&Cli::try_parse_from(v).unwrap())
         };
-        assert_eq!(parse(&[]), 0, "the Dfam caller is ungated by default");
+        assert_eq!(parse(&[]), 1, "the Dfam caller asks for one covering instance");
         assert_eq!(parse(&["--orig"]), 2, "--orig restores the C++ default");
         assert_eq!(parse(&["--min", "3"]), 3);
         assert_eq!(parse(&["--orig", "--min", "0"]), 0, "an explicit 0 disables it");

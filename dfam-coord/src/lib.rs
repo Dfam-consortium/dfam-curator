@@ -21,6 +21,29 @@ pub enum LogLevel {
     Detailed,
 }
 
+/// Controls for the interval pass that runs after validation and mapping.
+///
+/// discoord always detects and reports; these two switches only decide whether
+/// it acts.  They are independent: either, both or neither may be set.
+#[derive(Clone, Debug)]
+pub struct IntervalOptions {
+    /// Drop records whose span sits inside another record's span.
+    pub remove_contained: bool,
+    /// Fold each run of mutually overlapping records into one record whose
+    /// sequence is re-extracted from the reference over the union span.
+    pub merge_overlapping: bool,
+    /// Overlap needed before two records join the same merge cluster.  A value
+    /// of 1 or more is a base-pair count; a value between 0 and 1 is a fraction
+    /// of the shorter of the two spans.
+    pub min_overlap: f64,
+}
+
+impl Default for IntervalOptions {
+    fn default() -> Self {
+        IntervalOptions { remove_contained: false, merge_overlapping: false, min_overlap: 1.0 }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SequenceRecord {
     pub input_file: String,
@@ -163,6 +186,8 @@ pub fn process_sequences(
     debug_mode: bool,
     assembly_name: Option<&str>,
     remove_duplicates: bool,
+    intervals: &IntervalOptions,
+    log_level: &LogLevel,
 ) -> Vec<SequenceRecord> {
     let mut results = sequences;
 
@@ -207,6 +232,8 @@ pub fn process_sequences(
             }
         }
     }
+
+    analyze_intervals(&mut results, genome_map, intervals, log_level);
 
     results
 }
@@ -1185,6 +1212,278 @@ fn bad_char_heuristic(pattern: &[u8], bad_char: &mut [isize; 256]) {
     }
 }
 
+/// Overlap, in base pairs, that two spans must share before they are allowed to
+/// join the same merge cluster.  `min_overlap` below 1 is read as a fraction of
+/// the shorter span; 1 or more is read as a literal base-pair count.
+fn required_overlap(len_a: u64, len_b: u64, min_overlap: f64) -> u64 {
+    if min_overlap < 1.0 {
+        let shorter = len_a.min(len_b) as f64;
+        (((min_overlap.max(0.0)) * shorter).ceil() as u64).max(1)
+    } else {
+        min_overlap as u64
+    }
+}
+
+/// Interval-level redundancy handling, run after validation and mapping.
+///
+/// Records are grouped by (input file, sequence id), so separate families and
+/// separate reference sequences never interact.  Strand is ignored: two records
+/// covering the same bases are redundant whichever way round they were written,
+/// and a merged cluster takes the orientation of its longest member.
+///
+/// This always counts and reports.  `opts` only decides what it acts on, so
+/// discoord tells you what is there whether or not you asked it to do anything
+/// about it.
+pub fn analyze_intervals(
+    records: &mut [SequenceRecord],
+    genome_map: &HashMap<String, Vec<u8>>,
+    opts: &IntervalOptions,
+    log_level: &LogLevel,
+) {
+    // A record earns a span only if its coordinates were resolved.  Anything
+    // still carrying its originally-parsed (and known-wrong) numbers would
+    // poison the comparison, so it sits the pass out.
+    let spans: Vec<Option<(u64, u64, char)>> = records
+        .iter()
+        .map(|r| match (r.start_1b, r.end_1b, r.orient, r.validated.as_deref()) {
+            (Some(s), Some(e), Some(o), Some(v))
+                if s <= e && v != "invalid" && v != "removed_remapped_duplicate" =>
+            {
+                Some((s, e, o))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let mut groups: HashMap<(String, String), Vec<usize>> = HashMap::new();
+    for (i, span) in spans.iter().enumerate() {
+        if span.is_none() {
+            continue;
+        }
+        groups
+            .entry((records[i].input_file.clone(), records[i].sequence_id.clone()))
+            .or_default()
+            .push(i);
+    }
+    let eligible: usize = groups.values().map(|v| v.len()).sum();
+    if eligible == 0 {
+        return;
+    }
+    let mut keys: Vec<(String, String)> = groups.keys().cloned().collect();
+    keys.sort();
+
+    let mut contained: Vec<(usize, usize)> = Vec::new();
+    let mut overlap_pairs: u64 = 0;
+    let mut clusters: Vec<Vec<usize>> = Vec::new();
+
+    for key in &keys {
+        let idxs = &groups[key];
+
+        // Start ascending, longest first at a tie, so a container is always
+        // seen before anything it swallows; equal spans fall back to input
+        // order, which keeps the earliest copy.
+        let mut by_start = idxs.clone();
+        by_start.sort_by_key(|&i| {
+            let (s, e, _) = spans[i].unwrap();
+            (s, std::cmp::Reverse(e), records[i].order)
+        });
+
+        let mut contained_here: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut reach: Option<(u64, usize)> = None;
+        for &i in &by_start {
+            let (_, e, _) = spans[i].unwrap();
+            match reach {
+                // The record holding `reach` cannot itself be contained, so the
+                // container reported here always survives the pass.
+                Some((max_end, container)) if e <= max_end => {
+                    contained.push((i, container));
+                    contained_here.insert(i);
+                }
+                _ => reach = Some((e, i)),
+            }
+        }
+
+        // Exact pair count by sweep: retire everything that ends before this
+        // record starts, and whatever is still open overlaps it.
+        let mut open: std::collections::BinaryHeap<std::cmp::Reverse<u64>> =
+            std::collections::BinaryHeap::new();
+        for &i in &by_start {
+            let (s, e, _) = spans[i].unwrap();
+            while let Some(&std::cmp::Reverse(end)) = open.peek() {
+                if end < s {
+                    open.pop();
+                } else {
+                    break;
+                }
+            }
+            overlap_pairs += open.len() as u64;
+            open.push(std::cmp::Reverse(e));
+        }
+
+        // Build clusters whether or not merging is switched on, so the report
+        // can say what merging would do.  When containment removal is also on,
+        // the records it drops are already out of the running.
+        let mut live: Vec<usize> = idxs
+            .iter()
+            .copied()
+            .filter(|i| !(opts.remove_contained && contained_here.contains(i)))
+            .collect();
+        live.sort_by_key(|&i| {
+            let (s, e, _) = spans[i].unwrap();
+            (s, e, records[i].order)
+        });
+
+        let mut cluster: Vec<usize> = Vec::new();
+        let (mut cl_start, mut cl_end) = (0u64, 0u64);
+        for &i in &live {
+            let (s, e, _) = spans[i].unwrap();
+            if cluster.is_empty() {
+                cluster.push(i);
+                cl_start = s;
+                cl_end = e;
+                continue;
+            }
+            // Measured against the cluster's running span, not just the previous
+            // record, so a chain of tiled windows stays one cluster.
+            let shared = (cl_end.min(e) as i64) - (cl_start.max(s) as i64) + 1;
+            let needed = required_overlap(cl_end - cl_start + 1, e - s + 1, opts.min_overlap) as i64;
+            if shared >= needed {
+                cluster.push(i);
+                cl_end = cl_end.max(e);
+            } else {
+                if cluster.len() > 1 {
+                    clusters.push(cluster.clone());
+                }
+                cluster.clear();
+                cluster.push(i);
+                cl_start = s;
+                cl_end = e;
+            }
+        }
+        if cluster.len() > 1 {
+            clusters.push(cluster);
+        }
+    }
+
+    let clustered_records: usize = clusters.iter().map(|c| c.len()).sum();
+
+    // ---- act ----------------------------------------------------------------
+    let mut merged_detail: Vec<(String, u64, u64, char, usize)> = Vec::new();
+    let mut alignment_lost = false;
+    if opts.merge_overlapping {
+        for cluster in &clusters {
+            // The longest member sets orientation and keeps its description;
+            // ties go to whichever came first in the file.
+            let rep = *cluster
+                .iter()
+                .max_by_key(|&&i| {
+                    let (s, e, _) = spans[i].unwrap();
+                    (e - s, std::cmp::Reverse(records[i].order))
+                })
+                .unwrap();
+            let new_start = cluster.iter().map(|&i| spans[i].unwrap().0).min().unwrap();
+            let new_end = cluster.iter().map(|&i| spans[i].unwrap().1).max().unwrap();
+            // Only worth warning about when the input actually carried an
+            // alignment for merging to invalidate.
+            let had_alignment = cluster.iter().any(|&i| records[i].aligned_seq.is_some());
+            let new_order = cluster.iter().map(|&i| records[i].order).min().unwrap();
+            let orient = records[rep].orient.unwrap_or('+');
+
+            let sequence = match genome_map.get(&records[rep].sequence_id) {
+                Some(g) if new_start >= 1 && new_end as usize <= g.len() => {
+                    let sub = &g[(new_start - 1) as usize..new_end as usize];
+                    if orient == '-' {
+                        reverse_complement(sub)
+                    } else {
+                        sub.to_vec()
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "## Warning: merged span {}:{}-{} lies outside the reference; cluster left unmerged",
+                        records[rep].sequence_id, new_start, new_end
+                    );
+                    continue;
+                }
+            };
+
+            for &i in cluster {
+                if i != rep {
+                    records[i].validated = Some("removed_merged".to_string());
+                }
+            }
+            let sequence_id = records[rep].sequence_id.clone();
+            let r = &mut records[rep];
+            r.start_1b = Some(new_start);
+            r.end_1b = Some(new_end);
+            r.orient = Some(orient);
+            r.order = new_order;
+            r.sequence = sequence;
+            // A merged span has no alignment columns; Stockholm output falls
+            // back to the ungapped sequence, which no longer fits the MSA.
+            r.aligned_seq = None;
+            r.validated = Some("merged_overlapping".to_string());
+            if had_alignment {
+                alignment_lost = true;
+            }
+            merged_detail.push((sequence_id, new_start, new_end, orient, cluster.len()));
+        }
+    }
+
+    if opts.remove_contained {
+        for &(i, _) in &contained {
+            records[i].validated = Some("removed_contained".to_string());
+        }
+    }
+
+    // ---- report -------------------------------------------------------------
+    println!(
+        "## o Intervals: {} record(s) with coordinates in {} group(s)",
+        eligible,
+        keys.len()
+    );
+    println!("##     Overlapping pairs: {}", overlap_pairs);
+    println!(
+        "##     Contained records: {} ({})",
+        contained.len(),
+        if opts.remove_contained { "removed" } else { "reported only" }
+    );
+    println!(
+        "##     Merge clusters: {} covering {} record(s) ({})",
+        clusters.len(),
+        clustered_records,
+        if opts.merge_overlapping {
+            format!("{} merged record(s) written", merged_detail.len())
+        } else {
+            "reported only".to_string()
+        }
+    );
+    if alignment_lost {
+        println!("##     Note: merged records dropped their alignment columns; the output is no longer a valid MSA");
+    }
+
+    if *log_level != LogLevel::Summary {
+        if !contained.is_empty() {
+            println!("##     Contained detail:");
+            for &(i, container) in &contained {
+                let (s, e, o) = spans[i].unwrap();
+                let (cs, ce, co) = spans[container].unwrap();
+                println!(
+                    "##       {}:{}-{}_{} inside {}:{}-{}_{}",
+                    records[i].sequence_id, s, e, o,
+                    records[container].sequence_id, cs, ce, co
+                );
+            }
+        }
+        if !merged_detail.is_empty() {
+            println!("##     Merge detail:");
+            for (seq_id, s, e, orient, count) in &merged_detail {
+                println!("##       {}:{}-{}_{} <- {} records", seq_id, s, e, orient, count);
+            }
+        }
+    }
+}
+
 pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: String) {
     match format {
         LogLevel::Summary | LogLevel::PerRecord => {
@@ -1193,8 +1492,16 @@ pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: Strin
             let mut fixed_count = 0;
             for record in records.iter() {
                 let v = record.validated.as_deref();
-                if v.is_some() && v != Some("valid") && v != Some("invalid")
-                    && v != Some("removed_remapped_duplicate")
+                if v.is_some()
+                    && !matches!(
+                        v,
+                        Some("valid")
+                            | Some("invalid")
+                            | Some("removed_remapped_duplicate")
+                            | Some("removed_contained")
+                            | Some("removed_merged")
+                            | Some("merged_overlapping")
+                    )
                 {
                     fixed_count += 1;
                     *fix_counts.entry(record.validated.clone().unwrap()).or_insert(0) += 1;
@@ -1202,7 +1509,13 @@ pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: Strin
             }
             let valid_count = records.iter().filter(|r| r.validated.as_deref() == Some("valid")).count();
             let invalid_count = records.iter().filter(|r| r.validated.as_deref() == Some("invalid")).count();
-            let removed_dup_count = records.iter().filter(|r| r.validated.as_deref() == Some("removed_remapped_duplicate")).count();
+            let count_of = |status: &str| {
+                records.iter().filter(|r| r.validated.as_deref() == Some(status)).count()
+            };
+            let removed_dup_count = count_of("removed_remapped_duplicate");
+            let removed_contained_count = count_of("removed_contained");
+            let absorbed_count = count_of("removed_merged");
+            let merged_count = count_of("merged_overlapping");
 
             println!("{}:", label);
             println!("  Total Sequences: {}", total_records);
@@ -1213,6 +1526,15 @@ pub fn output_results(records: &[SequenceRecord], format: LogLevel, label: Strin
             }
             if removed_dup_count > 0 {
                 println!("     Removed Duplicate Sequences: {}", removed_dup_count);
+            }
+            if removed_contained_count > 0 {
+                println!("     Removed Contained Records: {}", removed_contained_count);
+            }
+            if merged_count > 0 {
+                println!(
+                    "     Merged Records: {} (absorbing {} others)",
+                    merged_count, absorbed_count
+                );
             }
             println!("     Invalid Coordinates: {}", invalid_count);
         }
@@ -1392,5 +1714,296 @@ mod coordinate_tests {
 
         let bare = SequenceRecord::from_seq_row(&SeqRow::from_name_seq("consensus", "ACGT"), "x.stk", 0, 0);
         assert_eq!((bare.start_1b, bare.end_1b), (None, None));
+    }
+}
+
+#[cfg(test)]
+mod interval_tests {
+    use super::*;
+
+    fn rec(file: &str, seq_id: &str, s: u64, e: u64, o: char, order: usize) -> SequenceRecord {
+        SequenceRecord {
+            input_file: file.to_string(),
+            metadata_idx: 0,
+            order,
+            original_id: Some(format!("{}:{}-{}_{}", seq_id, s, e, o)),
+            assembly_id: None,
+            sequence_id: seq_id.to_string(),
+            start_1b: Some(s),
+            end_1b: Some(e),
+            orient: Some(o),
+            inferred_version: None,
+            sequence: Vec::new(),
+            aligned_seq: None,
+            validated: Some("valid".to_string()),
+        }
+    }
+
+    fn genome(len: usize) -> HashMap<String, Vec<u8>> {
+        let bases = b"ACGT";
+        let mut x: u64 = 12345;
+        let seq: Vec<u8> = (0..len)
+            .map(|_| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                bases[(x >> 33) as usize % 4]
+            })
+            .collect();
+        let mut m = HashMap::new();
+        m.insert("chr1".to_string(), seq.clone());
+        m.insert("chr2".to_string(), seq);
+        m
+    }
+
+    fn opts(remove_contained: bool, merge_overlapping: bool, min_overlap: f64) -> IntervalOptions {
+        IntervalOptions { remove_contained, merge_overlapping, min_overlap }
+    }
+
+    fn status(r: &SequenceRecord) -> &str {
+        r.validated.as_deref().unwrap_or("")
+    }
+
+    fn run(records: &mut Vec<SequenceRecord>, o: &IntervalOptions) {
+        analyze_intervals(records, &genome(2000), o, &LogLevel::Summary);
+    }
+
+    #[test]
+    fn required_overlap_reads_below_one_as_a_fraction_of_the_shorter_span() {
+        assert_eq!(required_overlap(100, 200, 0.5), 50);
+        assert_eq!(required_overlap(200, 100, 0.5), 50);
+        // Rounds up, so a fraction never silently admits a shorter overlap.
+        assert_eq!(required_overlap(101, 999, 0.5), 51);
+        // A fraction can never fall to zero and let touching spans merge.
+        assert_eq!(required_overlap(100, 100, 0.0), 1);
+    }
+
+    #[test]
+    fn required_overlap_reads_one_and_above_as_base_pairs() {
+        assert_eq!(required_overlap(100, 200, 1.0), 1);
+        assert_eq!(required_overlap(100, 200, 40.0), 40);
+    }
+
+    /// Exact duplicates are containment's degenerate case: the earliest record
+    /// in the file is the keeper and every later copy is contained in it.
+    #[test]
+    fn identical_spans_keep_the_earliest_record() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 100, 200, '+', 0),
+            rec("f.fa", "chr1", 100, 200, '+', 1),
+            rec("f.fa", "chr1", 100, 200, '+', 2),
+        ];
+        run(&mut r, &opts(true, false, 1.0));
+        assert_eq!(status(&r[0]), "valid");
+        assert_eq!(status(&r[1]), "removed_contained");
+        assert_eq!(status(&r[2]), "removed_contained");
+    }
+
+    #[test]
+    fn containment_ignores_strand() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 100, 200, '+', 0),
+            rec("f.fa", "chr1", 120, 180, '-', 1),
+        ];
+        run(&mut r, &opts(true, false, 1.0));
+        assert_eq!(status(&r[0]), "valid");
+        assert_eq!(status(&r[1]), "removed_contained");
+    }
+
+    /// A record that swallows a shorter one can itself be swallowed by a longer
+    /// one; the survivor must be the outermost span, not the middle link.
+    #[test]
+    fn a_nested_chain_collapses_to_its_outermost_span() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 150, 160, '+', 0),
+            rec("f.fa", "chr1", 120, 180, '+', 1),
+            rec("f.fa", "chr1", 100, 200, '+', 2),
+        ];
+        run(&mut r, &opts(true, false, 1.0));
+        assert_eq!(status(&r[0]), "removed_contained");
+        assert_eq!(status(&r[1]), "removed_contained");
+        assert_eq!(status(&r[2]), "valid");
+    }
+
+    /// Overlap is measured against the cluster's running span, so a staircase of
+    /// tiled windows stays one cluster even though the ends never touch.
+    /// The surviving record is the longest member of the cluster, not the first
+    /// one in the file.
+    #[test]
+    fn the_longest_member_is_the_survivor() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 1, 50, '+', 0),
+            rec("f.fa", "chr1", 40, 200, '+', 1),
+            rec("f.fa", "chr1", 190, 240, '+', 2),
+        ];
+        run(&mut r, &opts(false, true, 1.0));
+        assert_eq!(status(&r[0]), "removed_merged");
+        assert_eq!(status(&r[1]), "merged_overlapping");
+        assert_eq!((r[1].start_1b, r[1].end_1b), (Some(1), Some(240)));
+        assert_eq!(status(&r[2]), "removed_merged");
+    }
+
+    #[test]
+    fn tiled_windows_chain_into_a_single_cluster() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 1, 100, '+', 0),
+            rec("f.fa", "chr1", 51, 150, '+', 1),
+            rec("f.fa", "chr1", 101, 200, '+', 2),
+        ];
+        run(&mut r, &opts(false, true, 1.0));
+        // Equal lengths, so the tie falls to the earliest record in the file.
+        assert_eq!(status(&r[0]), "merged_overlapping");
+        assert_eq!((r[0].start_1b, r[0].end_1b), (Some(1), Some(200)));
+        assert_eq!(status(&r[1]), "removed_merged");
+        assert_eq!(status(&r[2]), "removed_merged");
+    }
+
+    #[test]
+    fn a_fractional_threshold_refuses_a_weak_join() {
+        let spans = || {
+            vec![
+                rec("f.fa", "chr1", 1, 100, '+', 0),
+                rec("f.fa", "chr1", 99, 200, '+', 1),
+            ]
+        };
+        // 2 bp shared, which clears the 1 bp default...
+        let mut loose = spans();
+        run(&mut loose, &opts(false, true, 1.0));
+        let merged = loose.iter().find(|x| status(x) == "merged_overlapping").unwrap();
+        assert_eq!((merged.start_1b, merged.end_1b), (Some(1), Some(200)));
+
+        // ...but not half of the shorter span.
+        let mut strict = spans();
+        run(&mut strict, &opts(false, true, 0.5));
+        assert!(strict.iter().all(|x| status(x) == "valid"));
+    }
+
+    #[test]
+    fn a_base_pair_threshold_cuts_exactly_where_it_says() {
+        let spans = || {
+            vec![
+                rec("f.fa", "chr1", 1, 100, '+', 0),
+                rec("f.fa", "chr1", 99, 200, '+', 1),
+            ]
+        };
+        let mut at = spans();
+        run(&mut at, &opts(false, true, 2.0));
+        assert!(at.iter().any(|x| status(x) == "merged_overlapping"));
+
+        let mut over = spans();
+        run(&mut over, &opts(false, true, 3.0));
+        assert!(over.iter().all(|x| status(x) == "valid"));
+    }
+
+    /// Grouping keys on the input file as well as the sequence id, so two
+    /// families passed in one invocation never bleed into each other.
+    #[test]
+    fn separate_input_files_never_interact() {
+        let mut r = vec![
+            rec("a.fa", "chr1", 100, 200, '+', 0),
+            rec("b.fa", "chr1", 100, 200, '+', 0),
+        ];
+        run(&mut r, &opts(true, true, 1.0));
+        assert_eq!(status(&r[0]), "valid");
+        assert_eq!(status(&r[1]), "valid");
+    }
+
+    #[test]
+    fn separate_reference_sequences_never_interact() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 100, 200, '+', 0),
+            rec("f.fa", "chr2", 100, 200, '+', 1),
+        ];
+        run(&mut r, &opts(true, true, 1.0));
+        assert_eq!(status(&r[0]), "valid");
+        assert_eq!(status(&r[1]), "valid");
+    }
+
+    #[test]
+    fn a_merged_record_carries_the_reference_sequence_for_its_union_span() {
+        let g = genome(2000);
+        let mut r = vec![
+            rec("f.fa", "chr1", 11, 20, '+', 0),
+            rec("f.fa", "chr1", 16, 25, '+', 1),
+        ];
+        analyze_intervals(&mut r, &g, &opts(false, true, 1.0), &LogLevel::Summary);
+        assert_eq!((r[0].start_1b, r[0].end_1b), (Some(11), Some(25)));
+        assert_eq!(r[0].sequence, g["chr1"][10..25].to_vec());
+    }
+
+    /// The longest member sets the orientation, and a minus-strand result is
+    /// reverse complemented out of the reference.
+    #[test]
+    fn the_longest_member_sets_the_strand_and_the_sequence_follows_it() {
+        let g = genome(2000);
+        let mut r = vec![
+            rec("f.fa", "chr1", 25, 34, '+', 0),
+            rec("f.fa", "chr1", 11, 30, '-', 1),
+        ];
+        analyze_intervals(&mut r, &g, &opts(false, true, 1.0), &LogLevel::Summary);
+        let merged = r.iter().find(|x| status(x) == "merged_overlapping").unwrap();
+        assert_eq!((merged.start_1b, merged.end_1b, merged.orient), (Some(11), Some(34), Some('-')));
+        assert_eq!(merged.sequence, reverse_complement(&g["chr1"][10..34]));
+    }
+
+    #[test]
+    fn a_merged_record_drops_its_alignment_columns() {
+        let mut r = vec![
+            rec("f.stk", "chr1", 11, 20, '+', 0),
+            rec("f.stk", "chr1", 16, 25, '+', 1),
+        ];
+        r[0].aligned_seq = Some(b"ACGT----ACGT".to_vec());
+        r[1].aligned_seq = Some(b"ACGT----ACGT".to_vec());
+        run(&mut r, &opts(false, true, 1.0));
+        assert!(r[0].aligned_seq.is_none());
+    }
+
+    /// Dropping contained records first must not move the union span, since a
+    /// contained record contributes no bases the cluster does not already hold.
+    #[test]
+    fn removing_contained_records_leaves_the_merged_span_unchanged() {
+        let spans = || {
+            vec![
+                rec("f.fa", "chr1", 1, 100, '+', 0),
+                rec("f.fa", "chr1", 20, 60, '+', 1),
+                rec("f.fa", "chr1", 51, 150, '+', 2),
+            ]
+        };
+        let mut merge_only = spans();
+        run(&mut merge_only, &opts(false, true, 1.0));
+
+        let mut both = spans();
+        run(&mut both, &opts(true, true, 1.0));
+
+        let span_of = |v: &Vec<SequenceRecord>| {
+            let m = v.iter().find(|x| status(x) == "merged_overlapping").unwrap();
+            (m.start_1b, m.end_1b)
+        };
+        assert_eq!(span_of(&merge_only), (Some(1), Some(150)));
+        assert_eq!(span_of(&both), span_of(&merge_only));
+    }
+
+    /// A record still holding its originally-parsed, known-wrong coordinates
+    /// must not be compared against records whose coordinates were resolved.
+    #[test]
+    fn records_without_resolved_coordinates_sit_the_pass_out() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 100, 200, '+', 0),
+            rec("f.fa", "chr1", 120, 180, '+', 1),
+        ];
+        r[1].validated = Some("invalid".to_string());
+        run(&mut r, &opts(true, true, 1.0));
+        assert_eq!(status(&r[0]), "valid");
+        assert_eq!(status(&r[1]), "invalid");
+    }
+
+    #[test]
+    fn detection_alone_changes_nothing() {
+        let mut r = vec![
+            rec("f.fa", "chr1", 1, 100, '+', 0),
+            rec("f.fa", "chr1", 20, 60, '+', 1),
+            rec("f.fa", "chr1", 51, 150, '+', 2),
+        ];
+        run(&mut r, &opts(false, false, 1.0));
+        assert!(r.iter().all(|x| status(x) == "valid"));
+        assert_eq!((r[0].start_1b, r[0].end_1b), (Some(1), Some(100)));
     }
 }

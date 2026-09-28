@@ -6,7 +6,7 @@ resolver = "2"
 # The consensus-building tools live here alongside linup/stk/discoord; the
 # alignment foundation they sit on is dfam-lib, consumed from its published tag.
 [workspace.package]
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 license = "CC0-1.0"
 
@@ -20,20 +20,20 @@ license = "CC0-1.0"
 # the foot of this file: cargo then substitutes the working copy for the tag
 # without the manifests changing, so what is committed stays reproducible.
 
-aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
-aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.0" }
+aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
 cons-core = { path = "cons-core" }
 
 # RepeatAfterMe supplies the RAMExtend engine used by `te-composer --genome`,
 # consumed from its published tag like dfam-lib above. The tag's ram-core pins
 # dfam-lib 0.2.0, the same tag this workspace uses, so the graph carries one
 # copy of aln-core.
-ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.2.0" }
+ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "RepeatAfterMe_V0.2.2" }
 # Genomic identifiers on the input sequences are parsed with the canonical
 # Smitten implementation rather than a local regex, so that recursive ranges
 # normalize correctly.
@@ -127,5 +127,5 @@ internal-tools = []
 # Local RepeatAfterMe development — INACTIVE, and the same rules apply. The path
 # below is the public RepeatAfterMe checkout, which is where ram-core lives; the
 # private denovo repository does not carry that crate.
-#[patch."https://github.com/Dfam-consortium/RepeatAfterMe"]
-#ram-core      = { path = "../RepeatAfterMe/ram-core" }
+[patch."https://github.com/Dfam-consortium/RepeatAfterMe"]
+ram-core      = { path = "../RepeatAfterMe/ram-core" }
