@@ -145,13 +145,20 @@ pub fn load_instances(
             continue;
         }
         if let Some(tb) = p.assembly {
-            // The instance has to match the assembly it came from.
+            // The instance has to match the assembly it came from.  A 2bit
+            // file holds only A, C, G, T and N, and faToTwoBit writes every
+            // other IUB code as N, so an N there matches any IUB code in the
+            // alignment.  Without this, copies from assemblies that carry IUB
+            // codes failed the check; in one RepBase 31.08 genome that cost
+            // 293 of 314 families at least one of their closest ten copies,
+            // often the longest and least diverged.
             let ok = match tb.fetch(&h.query_name, h.query.start(), h.query.end()) {
                 Ok(g) => {
                     g.len() == bases.len()
-                        && g.iter()
-                            .zip(&bases)
-                            .all(|(a, b)| a.to_ascii_uppercase() == *b)
+                        && g.iter().zip(&bases).all(|(a, b)| {
+                            let a = a.to_ascii_uppercase();
+                            a == *b || (a == b'N' && b"RYKMSWBDHV".contains(b))
+                        })
                 }
                 Err(_) => false,
             };
@@ -160,11 +167,21 @@ pub fn load_instances(
                 continue;
             }
         }
-        let (q, s) = if h.orientation == Strand::Minus {
+        let (mut q, s) = if h.orientation == Strand::Minus {
             (revcomp(&h.query_seq), revcomp(&h.subj_seq))
         } else {
             (h.query_seq.clone(), h.subj_seq.clone())
         };
+        // A seed row carries the assembly's bases as its 2bit holds them:
+        // an IUB code other than N becomes N.
+        let mut h = h.clone();
+        for seq in [&mut q, &mut h.query_seq] {
+            for b in seq.iter_mut() {
+                if b"RYKMSWBDHVrykmswbdhv".contains(b) {
+                    *b = if b.is_ascii_lowercase() { b'n' } else { b'N' };
+                }
+            }
+        }
         if h.subj.start() as usize + aln_core::seq::ungapped_len(&s) > consensus.len() {
             drop.unusable_rows += 1;
             continue;
@@ -367,6 +384,78 @@ pub fn top_up_coverage(
             }
             None => break,
         }
+    }
+    out
+}
+
+/// Add instances until every consensus position has `min_depth` of them, or
+/// no unchosen instance reaches a position still short.
+///
+/// The closest sample and the coverage fill leave stretches covered by one or
+/// two copies, and a consensus called there follows whichever copy happens to
+/// cover it, so ties and single-copy calls go against the library even where
+/// most copies in the genome carry the library's base.  This walks the same
+/// ranking.  Among the instances within `window` Kimura points of the first
+/// one that reaches a short position, it takes the one reaching the most short
+/// positions (earlier in the ranking on a tie): a long copy rather than a
+/// fragment, which gives fewer rows and fewer fragment ends in the alignment.
+/// `window` 0 keeps the ranking's order.
+pub fn top_up_depth(
+    inst: &[Instance],
+    ranked: &[usize],
+    chosen: &[usize],
+    cons_len: u64,
+    min_depth: u32,
+    window: f64,
+) -> Vec<usize> {
+    let n = cons_len as usize;
+    let span = |i: usize| -> (usize, usize) {
+        let a = (inst[i].rec.cons_start.max(1) - 1) as usize;
+        let b = (inst[i].rec.cons_end as usize).min(n);
+        (a.min(b), b)
+    };
+    let mut depth = vec![0u32; n];
+    let mut out = chosen.to_vec();
+    let mut taken = vec![false; inst.len()];
+    for &i in chosen {
+        let (a, b) = span(i);
+        depth[a..b].iter_mut().for_each(|d| *d += 1);
+        taken[i] = true;
+    }
+    loop {
+        // short[p] counts the positions before p still under min_depth
+        let mut short = vec![0u32; n + 1];
+        for p in 0..n {
+            short[p + 1] = short[p] + u32::from(depth[p] < min_depth);
+        }
+        if short[n] == 0 {
+            break;
+        }
+        let reach = |i: usize| -> u32 {
+            let (a, b) = span(i);
+            short[b] - short[a]
+        };
+        let Some(first) = ranked.iter().copied().find(|&i| !taken[i] && reach(i) > 0) else {
+            break;
+        };
+        let mut best = first;
+        if window > 0.0 {
+            let limit = inst[first].rec.kimura + window;
+            let mut best_reach = reach(first);
+            for &i in ranked {
+                if !taken[i] && inst[i].rec.kimura <= limit {
+                    let r = reach(i);
+                    if r > best_reach {
+                        best = i;
+                        best_reach = r;
+                    }
+                }
+            }
+        }
+        let (a, b) = span(best);
+        depth[a..b].iter_mut().for_each(|d| *d += 1);
+        taken[best] = true;
+        out.push(best);
     }
     out
 }

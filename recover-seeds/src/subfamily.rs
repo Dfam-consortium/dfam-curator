@@ -53,7 +53,7 @@ impl Groups {
 }
 
 /// A copy's base at each disputed position, 0 where it does not reach.
-fn rows(inst: &[&Instance], sites: &[(usize, u8, u8)], lib_len: usize) -> Vec<Vec<u8>> {
+pub fn rows(inst: &[&Instance], sites: &[(usize, u8, u8)], lib_len: usize) -> Vec<Vec<u8>> {
     let mut slot = vec![u16::MAX; lib_len];
     for (j, (pos, _, _)) in sites.iter().enumerate() {
         if *pos < lib_len {
