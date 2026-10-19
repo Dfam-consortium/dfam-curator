@@ -748,7 +748,10 @@ pub fn build_msa(
     // The gapped rows have to outlive the borrowed `MsaMember`s.
     let mut rows: Vec<(usize, Vec<u8>, Vec<u8>, &Alignment)> = Vec::with_capacity(alignments.len());
     for (i, a) in alignments {
-        let (gq, gs) = a.gapped(&seqs[*i].seq, &reference.seq)?;
+        // Rows must read along the reference: instances arrive in either
+        // orientation (genomic copies keep their genome strand), and
+        // `assemble_msa` places each reference row forward from `ref_start`.
+        let (gq, gs) = a.gapped_on_subject(&seqs[*i].seq, &reference.seq)?;
         rows.push((*i, gq, gs, a));
     }
 
@@ -2520,5 +2523,27 @@ mod gate_tests {
         let cons = gapped_consensus(&msa, &params(Caller::Dfam, 1));
         assert_eq!(cons[2], b'-');
         assert_eq!(seqmod::ungap(&cons), b"ACTA");
+    }
+}
+
+/// Instances in genome orientation: a copy that aligns on the minus strand must
+/// land in the MSA reverse-complemented, reading along the reference.
+#[cfg(test)]
+mod strand_tests {
+    use super::*;
+    use aln_core::align::{EditOp, EditScript};
+
+    #[test]
+    fn a_minus_strand_instance_reads_along_the_reference() {
+        let reference = Sequence { name: "ref".into(), seq: b"AACGTGGCATTC".to_vec() };
+        // The copy is the reverse complement of the reference with G>C at offset 5.
+        let copy = Sequence { name: "copy".into(), seq: seqmod::revcomp(b"AACGTCGCATTC") };
+        let mut e = EditScript::new();
+        e.push(EditOp::Sub, 12);
+        let a = Alignment::new("copy", "ref", 0, 0, Strand::Minus, 12, e);
+        let msa = build_msa(&reference, &[copy], &[(0, a)], InsertionPolicy::Drop).unwrap();
+        let row = msa.instance(0).unwrap();
+        assert_eq!(row.seq.as_slice(), b"AACGTCGCATTC");
+        assert_eq!(row.orient, Strand::Minus);
     }
 }

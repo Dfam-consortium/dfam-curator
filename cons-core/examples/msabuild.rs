@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if let Some(a) = aligner.align_prepared(&profile, q)? {
             score += a.score as i64;
-            let (gq, gs) = a.gapped(&q.seq, &reference.seq)?;
+            let (gq, gs) = a.gapped_on_subject(&q.seq, &reference.seq)?;
             rows.push((i, gq, gs, a));
         }
     }
