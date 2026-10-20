@@ -1,21 +1,17 @@
 [package]
 name = "recover-seeds"
-version = "0.1.0"
-edition = "2021"
-license = "CC0-1.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Sample copies from a RepeatMasker .align file and build seed alignments and consensi"
 
-# Its own workspace root: this crate sits inside the dfam-curator checkout but
-# is not a member of it, so the parent manifest needs no edit to build it.
-[workspace]
-
 [dependencies]
-aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
-aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
-aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
-aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
-dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
-cons-core = { path = "../cons-core" }
+aln-core.workspace = true
+aln-coord.workspace = true
+aln-engine.workspace = true
+aln-parasail.workspace = true
+dfam-stk-io.workspace = true
+cons-core.workspace = true
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 rayon = "1"
