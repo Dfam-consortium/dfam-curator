@@ -583,6 +583,12 @@ pub fn resolve_by_all_vs_all_with(
             continue;
         }
         let Ok(Some(al)) = tb_aligner.align(q, &seqs[best]) else { continue };
+        // Block segments are cut from an alignment already in one orientation;
+        // a minus-strand hit between them is spurious, and its query-order rows
+        // would not project onto centre positions.
+        if al.strand.is_minus() {
+            continue;
+        }
         let Ok((gq, gs)) = al.gapped(&q.seq, &seqs[best].seq) else { continue };
         let mut b = vec![b'-'; clen];
         let mut ins = vec![Vec::new(); clen + 1];
