@@ -161,6 +161,16 @@ struct Args {
     /// score
     #[arg(long)]
     rbsites_pad_rank: bool,
+    /// Closest policy: keep copies far more diverged than the family's closest
+    /// copies out of every pick but the coverage fill.  MULT,ADD: the limit is
+    /// the median Kimura divergence of the three least diverged copies
+    /// spanning --min-span-fraction of the consensus (any three when fewer are
+    /// that long) times MULT plus ADD points.  Copies past it go to the back of
+    /// the closest ranking, so the top of the sample, the fallbacks and their
+    /// padding, the search and its depth stage never take them, and the
+    /// coverage fill only where no nearer copy reaches.  Tested: 2,10
+    #[arg(long, value_parser = parse_div_limit)]
+    div_limit: Option<(f64, f64)>,
     /// With --rbsites-rank-order: when at least as many copies are
     /// RepBase-like as the sample takes, take the highest-scoring of those
     /// spanning at least --min-span-fraction of the consensus (ties to the
@@ -229,6 +239,11 @@ struct Args {
     /// search's moves
     #[arg(long, default_value_t = 60)]
     search_depth_pool: usize,
+    /// Search: at a library CG, count a call of T at the C or A at the G as
+    /// matching the library, since a curator may have built the consensus
+    /// with CpG restoration (acons --mam) or without it
+    #[arg(long)]
+    search_cpg_tolerant: bool,
     /// How insertions are merged: per-slot matches generateSeedAlignments,
     /// which opens the widest insertion seen at each slot
     #[arg(long, default_value = "per-slot")]
@@ -336,6 +351,15 @@ fn source_hint(scan: &[(usize, f64)], kept_identity: f64) -> &'static str {
         "narrow"
     } else {
         "mixed"
+    }
+}
+
+/// --div-limit MULT,ADD
+fn parse_div_limit(v: &str) -> Result<(f64, f64), String> {
+    let mut it = v.split(',').map(|x| x.trim().parse::<f64>());
+    match (it.next(), it.next(), it.next()) {
+        (Some(Ok(m)), Some(Ok(a)), None) if m >= 0.0 && a >= 0.0 => Ok((m, a)),
+        _ => Err(format!("expected MULT,ADD such as 2,10, got {v:?}")),
     }
 }
 
@@ -519,6 +543,7 @@ fn main() -> Result<()> {
                             target_copies: n,
                             min_depth: args.min_depth,
                             min_span_fraction: args.min_span_fraction,
+                            div_limit: args.div_limit,
                         };
                         let picked =
                             family::sample(&inst, consensus.len() as u64, policy, &params);
@@ -553,16 +578,19 @@ fn main() -> Result<()> {
                     target_copies: target,
                     min_depth: args.min_depth,
                     min_span_fraction: args.min_span_fraction,
+                    div_limit: args.div_limit,
                 };
                 let chosen = family::sample(&inst, consensus.len() as u64, policy, &params);
                 if chosen.is_empty() {
                     continue;
                 }
+                let limit = family::div_limit(&inst, consensus.len() as u64, args.min_span_fraction, args.div_limit);
                 let chosen = if policy == Policy::Closest && args.cover_gap > 0 {
-                    let ranked = family::rank_closest(
+                    let ranked = family::rank_closest_limited(
                         &inst,
                         consensus.len() as u64,
                         args.min_span_fraction,
+                        limit,
                     );
                     let filled = family::top_up_coverage(
                         &inst,
@@ -574,10 +602,11 @@ fn main() -> Result<()> {
                     );
                     depth_fill(&inst, &ranked, filled, consensus.len() as u64, &args)
                 } else if policy == Policy::Closest {
-                    let ranked = family::rank_closest(
+                    let ranked = family::rank_closest_limited(
                         &inst,
                         consensus.len() as u64,
                         args.min_span_fraction,
+                        limit,
                     );
                     depth_fill(&inst, &ranked, chosen, consensus.len() as u64, &args)
                 } else {
@@ -773,15 +802,18 @@ fn main() -> Result<()> {
                 // its edits are within the margin of the kept seed's.
                 if policy == Policy::Closest && !given && args.search {
                     let lib_len = consensus.len();
-                    let ranked = family::rank_closest(&inst, lib_len as u64, args.min_span_fraction);
+                    let ranked = family::rank_closest_limited(&inst, lib_len as u64, args.min_span_fraction, limit);
                     let rule = if args.caller.starts_with("giri") { search::Rule::giri() } else { search::Rule::dfam() };
+                    // the search and its depth stage choose only among copies within the limit
+                    let n_near = family::within_limit(&inst, &ranked, limit).len().max(1);
                     let sp = search::Params {
-                        pool: args.search_pool,
+                        pool: args.search_pool.min(n_near),
                         max_copies: args.search_max_copies,
                         margin_per_kb: args.search_margin_per_kb,
                         restarts: args.search_restarts,
                         pairs: args.search_pairs,
-                        depth_pool: args.search_depth_pool,
+                        depth_pool: args.search_depth_pool.min(n_near),
+                        cpg_tolerant: args.search_cpg_tolerant,
                     };
                     let mut starts = vec![chosen.clone(), plain.clone()];
                     if args.search_restarts > 0 && !pop_disputed.is_empty() {
@@ -797,9 +829,14 @@ fn main() -> Result<()> {
                                     let unc2 = cv2.iter().filter(|c| !**c).count();
                                     let slack = (args.search_margin_per_kb * lib_len as f64 / 1000.0) as usize;
                                     let take = e2 <= e1 + slack && unc2 <= unc0;
+                                    let flag = match set.len() {
+                                        1 => ", single-copy seed",
+                                        2 => ", two-copy seed, both needed for coverage",
+                                        _ => "",
+                                    };
                                     let note = format!(
                                         "closest-by-search {}, differences {e1} -> {e2}, uncovered {unc0} -> {unc2}, \
-                                         copies {} -> {}, column-rule losses {lost}",
+                                         copies {} -> {}, column-rule losses {lost}{flag}",
                                         if take { "kept" } else { "tried" },
                                         chosen.len(),
                                         set.len()
@@ -884,6 +921,40 @@ fn main() -> Result<()> {
                 } else {
                     None
                 };
+                // The kept seed's consensus called three ways and compared with
+                // the library: GIRI, GIRI with its CpG restoration (acons --mam),
+                // and the Dfam caller with its CpG pass.  RepBase was built with
+                // GIRI's tools, with restoration for some families and not
+                // others, so the better of the two GIRI calls says how well the
+                // seed reproduces the library and which convention fits it; the
+                // Dfam call is what a recall for Dfam would give.  Reported only:
+                // the seed's own consensus is --caller's.
+                let caller_line = {
+                    let lib_len = consensus.len();
+                    let cov = covered_positions(lib_len, &inst, &chosen);
+                    let mut parts = Vec::new();
+                    let mut best: Option<(f64, &str)> = None;
+                    for c in ["giri", "giri-cpg", "dfam"] {
+                        // GIRI's restoration tests deamination counts against the
+                        // copies' own similarity; with one or two copies the
+                        // similarity is ~1, the expected rate ~0, and every TG and
+                        // CA is restored, so it is not reported there.
+                        if c == "giri-cpg" && chosen.len() < 3 {
+                            parts.push("giri-cpg n/a (under 3 copies)".to_string());
+                            continue;
+                        }
+                        let g = call_consensus(&msa, args.min_non_gap, c);
+                        let called: Vec<u8> = g.iter().filter(|b| b.is_ascii_alphabetic()).copied().collect();
+                        if let Ok(cc) = compare::compare(&aligner, consensus, &called, &cov) {
+                            let id = 100.0 * (1.0 - edits(&cc) as f64 / lib_len.max(1) as f64);
+                            parts.push(format!("{c} {id:.2}"));
+                            if c.starts_with("giri") && best.is_none_or(|b| id > b.0) {
+                                best = Some((id, c));
+                            }
+                        }
+                    }
+                    format!("CallerCmp: {}; best GIRI {}", parts.join(", "), best.map(|b| b.1).unwrap_or("none"))
+                };
                 cmp.agreed = Vec::new();   // large, and nothing downstream reads it
                 let mut record = to_stk(
                     fam,
@@ -897,6 +968,15 @@ fn main() -> Result<()> {
                     &scan,
                     sub.as_ref(),
                 );
+                {
+                    let at = record
+                        .gf
+                        .iter()
+                        .position(|(t, v)| t == "**" && v.starts_with("Source:"))
+                        .map(|i| i + 1)
+                        .unwrap_or(record.gf.len());
+                    record.gf.insert(at, ("**".into(), caller_line));
+                }
                 if let Some(line) = selection {
                     let at = record
                         .gf
@@ -1044,8 +1124,10 @@ fn lineage_fallback(
     if dispersion < args.lineage_min_dispersion || lineage_copies < args.lineage_min_copies {
         return None;
     }
-    let ranked = family::rank_closest(inst, lib_len as u64, args.min_span_fraction);
-    let mut order: Vec<usize> = ranked.iter().copied().filter(|&i| !score[i].is_nan()).collect();
+    let limit = family::div_limit(inst, lib_len as u64, args.min_span_fraction, args.div_limit);
+    let ranked = family::rank_closest_limited(inst, lib_len as u64, args.min_span_fraction, limit);
+    let mut order: Vec<usize> =
+        family::within_limit(inst, &ranked, limit).into_iter().filter(|&i| !score[i].is_nan()).collect();
     // stable: equal scores keep the closest ranking's order
     order.sort_by(|&a, &b| score[b].partial_cmp(&score[a]).unwrap_or(std::cmp::Ordering::Equal));
     let mut cand: Vec<usize> = order.into_iter().take(target).collect();
@@ -1132,8 +1214,10 @@ fn rbsites_fallback(
     }
     let mean = |x: &[f64]| if x.is_empty() { 0.0 } else { x.iter().sum::<f64>() / x.len() as f64 };
     let dispersion = mean(&dev2) / mean(&var).max(1e-12);
-    let ranked = family::rank_closest(inst, lib_len as u64, args.min_span_fraction);
-    let mut order: Vec<usize> = ranked.iter().copied().filter(|&i| !score[i].is_nan()).collect();
+    let limit = family::div_limit(inst, lib_len as u64, args.min_span_fraction, args.div_limit);
+    let ranked = family::rank_closest_limited(inst, lib_len as u64, args.min_span_fraction, limit);
+    let mut order: Vec<usize> =
+        family::within_limit(inst, &ranked, limit).into_iter().filter(|&i| !score[i].is_nan()).collect();
     if args.rbsites_rank_order {
         // RepBase-like copies in ranking order, then the rest by score (or in
         // ranking order with --rbsites-pad-rank)
@@ -1195,9 +1279,11 @@ fn disputed_fallback(
         })
         .collect();
     let n_like = like.iter().filter(|l| **l).count();
-    let ranked = family::rank_closest(inst, lib_len as u64, args.min_span_fraction);
-    let mut cand: Vec<usize> = ranked.iter().copied().filter(|&i| like[i]).take(target).collect();
-    for &i in &ranked {
+    let limit = family::div_limit(inst, lib_len as u64, args.min_span_fraction, args.div_limit);
+    let ranked = family::rank_closest_limited(inst, lib_len as u64, args.min_span_fraction, limit);
+    let near = family::within_limit(inst, &ranked, limit);
+    let mut cand: Vec<usize> = near.iter().copied().filter(|&i| like[i]).take(target).collect();
+    for &i in &near {
         if cand.len() >= target {
             break;
         }
@@ -1294,11 +1380,14 @@ fn covered_positions(len: usize, inst: &[family::Instance], chosen: &[usize]) ->
 }
 
 /// Every difference between a called consensus and the library that edit
-/// identity counts: substitutions, ambiguity codes, insertions, deletions and
-/// library bases no copy covers.  Edit identity is 1 - edits / library
-/// length; the fallbacks compete on it.
+/// identity counts: substitutions, ambiguity codes, internal insertions and
+/// deletions, library bases no copy covers, library bases missing at either
+/// end (trim5, trim3) and bases added beyond either end (ext5, ext3).  Edit
+/// identity is 1 - edits / library length; the fallbacks compete on it.  A
+/// consensus that falls short of the library's ends, or runs past them, is a
+/// different element, so its end bases count like any other.
 fn edits(c: &compare::ConsCmp) -> usize {
-    c.sub + c.amb + c.ins + c.del + c.unoccupied
+    c.sub + c.amb + c.ins + c.del + c.unoccupied + c.trim5 + c.trim3 + c.ext5 + c.ext3
 }
 
 /// The gapped consensus of `msa` under --caller.

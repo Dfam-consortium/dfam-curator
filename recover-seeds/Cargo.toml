@@ -10,11 +10,11 @@ description = "Sample copies from a RepeatMasker .align file and build seed alig
 [workspace]
 
 [dependencies]
-aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
-aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
-aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
-aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
-dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.2" }
+aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
+aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
+aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
+aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
+dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.3" }
 cons-core = { path = "../cons-core" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

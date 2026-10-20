@@ -226,6 +226,8 @@ pub struct SampleParams {
     pub min_depth: u32,
     /// Closest policy: an instance must cover this fraction of the consensus.
     pub min_span_fraction: f64,
+    /// Closest policy: --div-limit's (MULT, ADD), see [`div_limit`]
+    pub div_limit: Option<(f64, f64)>,
 }
 
 /// Every instance under the closest rule, nearest first.
@@ -252,6 +254,50 @@ pub fn rank_closest(inst: &[Instance], cons_len: u64, min_span_fraction: f64) ->
     full
 }
 
+/// The divergence past which a copy is too far from a family's closest copies
+/// to belong in its seed (--div-limit MULT,ADD): the median Kimura divergence
+/// of the three least diverged copies spanning `min_span_fraction` of the
+/// consensus (of any three when fewer are that long), times MULT, plus ADD.
+/// Scaling with the closest copies leaves room where even they are far from
+/// the library, and none where they sit within a few percent of it.
+pub fn div_limit(inst: &[Instance], cons_len: u64, min_span_fraction: f64, rule: Option<(f64, f64)>) -> Option<f64> {
+    let (mult, add) = rule?;
+    let need = (min_span_fraction * cons_len as f64) as u64;
+    let mut kim: Vec<f64> = inst.iter().filter(|x| x.span() >= need).map(|x| x.rec.kimura).collect();
+    if kim.len() < 3 {
+        kim = inst.iter().map(|x| x.rec.kimura).collect();
+    }
+    kim.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    kim.truncate(3);
+    if kim.is_empty() {
+        return None;
+    }
+    Some(kim[kim.len() / 2] * mult + add)
+}
+
+/// The members of `v` within the divergence limit, in order (all of `v`
+/// without one).
+pub fn within_limit(inst: &[Instance], v: &[usize], limit: Option<f64>) -> Vec<usize> {
+    match limit {
+        Some(lim) => v.iter().copied().filter(|&i| inst[i].rec.kimura <= lim).collect(),
+        None => v.to_vec(),
+    }
+}
+
+/// [`rank_closest`] with the copies past the divergence limit moved to the
+/// back, in their own order, where only a coverage fill reaches them.
+pub fn rank_closest_limited(inst: &[Instance], cons_len: u64, min_span_fraction: f64, limit: Option<f64>) -> Vec<usize> {
+    let ranked = rank_closest(inst, cons_len, min_span_fraction);
+    match limit {
+        Some(lim) => {
+            let (mut near, far): (Vec<usize>, Vec<usize>) = ranked.into_iter().partition(|&i| inst[i].rec.kimura <= lim);
+            near.extend(far);
+            near
+        }
+        None => ranked,
+    }
+}
+
 /// Choose instances under `policy`, returning indices into `inst`.
 ///
 /// The population rule, from `buildFamily`: rank by Kimura divergence, move
@@ -270,7 +316,9 @@ pub fn sample(inst: &[Instance], cons_len: u64, policy: Policy, p: &SampleParams
     });
     match policy {
         Policy::Closest => {
-            let mut ranked = rank_closest(inst, cons_len, p.min_span_fraction);
+            let ranked = rank_closest(inst, cons_len, p.min_span_fraction);
+            let limit = div_limit(inst, cons_len, p.min_span_fraction, p.div_limit);
+            let mut ranked = within_limit(inst, &ranked, limit);
             ranked.truncate(p.target_copies);
             ranked
         }
