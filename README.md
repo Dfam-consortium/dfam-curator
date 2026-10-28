@@ -473,6 +473,8 @@ OPTIONS:
     --format <ig|fasta>        Format for --consensus  [default: ig]
     --bootstrap-cons <FASTA>   Start from this consensus instead of deriving one
                                  from the copies (refine an existing family)
+    --fixed-cons <FASTA>       Align the copies to this consensus and keep it,
+                                 unrefined, as #=GC RF (seed alignment only)
     -n, --num <N>              Consensi to emit; below 1.0, a fraction of the
                                  input count  [default: 1]
     --name <NAME>              Base name for emitted consensi  [default: CON]
