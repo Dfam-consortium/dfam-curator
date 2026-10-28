@@ -821,6 +821,28 @@ Use it to improve an existing family against a new instance set, or to
 re-refine a curated consensus, rather than rediscovering a reference the
 instances may not agree on.
 
+## Aligning to a fixed consensus
+
+```
+te-composer instances.fa out.stk --fixed-cons model.fa
+```
+
+`--bootstrap-cons` still refines: the consensus it starts from can change in
+every base.  `--fixed-cons` is for a consensus that is already final, such as a
+curated model or one another pipeline built, and only needs a seed
+alignment.  The instances are aligned once with the usual backend and
+settings.  There is no bootstrap, refinement, extension or block repair.
+The record's `#=GC RF` is the supplied sequence, gapped where instances
+carry insertions, and its provenance says so:
+
+```
+#=GF ** TE-COMPOSER: FIXED-CONSENSUS: instances aligned to the supplied consensus, not refined
+```
+
+A single instance is enough, since no consensus is called.  `--fixed-cons`
+cannot be combined with `--bootstrap-cons`, `-n` or `--genome`.  ltr-forage's
+library driver uses it to write a seed alignment for each family model.
+
 ## Insertion packing
 
 See [Two repair mechanisms](#two-repair-mechanisms-dont-confuse-them) for what
@@ -865,6 +887,7 @@ rounds run per refinement.
 |---|---|
 | `--genome <2bit>` | Extend against a genome, then refine again |
 | `--bootstrap-cons <FASTA>` | Supply the starting consensus; skip the bootstrap phase |
+| `--fixed-cons <FASTA>` | Align the instances to this consensus and keep it as `#=GC RF`; no refinement |
 | `--consensus <FILE>` | Also write the bare consensus, in `--format ig\|fasta` |
 | `--hsps <best\|all\|tiled>` | How an instance's HSPs become MSA rows. Default `tiled` |
 | `--silent` | Suppress the progress report on stderr |
