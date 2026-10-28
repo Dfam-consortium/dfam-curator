@@ -771,8 +771,24 @@ fn check_au_line(au: &str, seen_orcids: &mut Vec<String>, d: &mut Vec<Diagnostic
             continue;
         }
 
-        // Flag any word that contains a '.': catches "R.", "J.", "A.F.A.", "F.", etc.
-        if name.split_whitespace().any(|w| w.contains('.')) {
+        let words: Vec<&str> = name.split_whitespace().collect();
+
+        // Flag a '.' in the first or last word ("R. Hubley", "A.F.A. Smit", "Smith J.") or
+        // in a middle word that is not just initials.  Middle initials are accepted with or
+        // without periods ("Robert M. Hubley", "Arian F.A. Smit"); Dfam's contributor
+        // export writes them that way.
+        let is_initials = |w: &str| {
+            let b = w.as_bytes();
+            b.len() == 1 && b[0].is_ascii_alphabetic()
+                || (b.len() % 2 == 0
+                    && b.chunks(2).all(|p| p[0].is_ascii_alphabetic() && p[1] == b'.'))
+        };
+        let (first, rest) = words.split_first().expect("name has a space");
+        let (last, middle) = rest.split_last().expect("name has two words");
+        if first.contains('.')
+            || last.contains('.')
+            || middle.iter().any(|w| w.contains('.') && !is_initials(w))
+        {
             d.push(warn(
                 "au_format",
                 format!(
@@ -783,8 +799,6 @@ fn check_au_line(au: &str, seen_orcids: &mut Vec<String>, d: &mut Vec<Diagnostic
             ));
             continue;
         }
-
-        let words: Vec<&str> = name.split_whitespace().collect();
 
         // Flag single-letter first word: catches "B McClintock".
         // Middle initials without periods (e.g. "Arian F Smit") are still accepted.
@@ -1221,6 +1235,11 @@ pub fn rf_consensus_status(r: &RawDfamRecord) -> Option<bool> {
         Some(rf) if !rf.is_empty() => rf,
         _ => return None,
     };
+    // A legacy RF of only 'X'/'x' and gaps is an occupancy mask, not a called
+    // consensus (current Dfam encodes occupancy with the called bases instead).
+    if rf.bytes().all(|b| is_gap(b) || b.eq_ignore_ascii_case(&b'X')) {
+        return None;
+    }
     if r.sequences.is_empty() {
         return None;
     }
@@ -1997,6 +2016,18 @@ s1          ACGT\n\
     }
 
     #[test]
+    fn rf_legacy_x_mask_no_warn() {
+        // An RF of only 'X'/'x' and gaps is a legacy occupancy mask; letters are not compared.
+        let r = make_record(
+            &[("DE","x"),("AU","x"),("TP","x"),("OC","x"),("SQ","4")],
+            Some("Xx.X"),
+            &[("s1","AC.T"),("s2","AC.T"),("s3","AC.T"),("s4","AC.T")],
+        );
+        let diags = lint_record(&r, None);
+        assert!(!has_check(&diags, "rf_consensus_mismatch"), "{:?}", diags);
+    }
+
+    #[test]
     fn rf_consensus_dot_gap_mismatch_warns() {
         // Consensus column 2 is all-gap ('.') but RF marks it as non-gap ('x').
         let r = make_record(
@@ -2526,8 +2557,20 @@ s1          ACGT\n\
     }
 
     #[test]
-    fn au_middle_initial_dot_warns() {
-        assert!(au_warns("Elena J. Watts"));
+    fn au_middle_initial_dot_is_clean() {
+        // Dfam's contributor export writes middle initials with a period.
+        for name in ["Elena J. Watts", "Robert M. Hubley", "Daniel L. Hartl",
+                     "Amanda M. Larracuente", "ORCID:0000-0002-4801-7579 Paul B. Frandsen",
+                     "Arian F.A. Smit", "Mary Ann J Smith"] {
+            assert!(!au_warns(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn au_dotted_first_or_last_word_warns() {
+        for name in ["J. Craig Venter", "Elena Watts J.", "Elena Jo. Watts", "Elena J.R Watts"] {
+            assert!(au_warns(name), "{name}");
+        }
     }
 
     #[test]
