@@ -143,6 +143,22 @@ struct Cli {
     #[arg(long = "bootstrap-cons", value_name = "FASTA", conflicts_with = "num")]
     bootstrap_cons: Option<PathBuf>,
 
+    /// Align the instances to this consensus and write the alignment with it,
+    /// unchanged, as `#=GC RF`.
+    ///
+    /// For a consensus that is already final — a curated model, or one built
+    /// by another pipeline — and only needs a seed alignment. The instances are
+    /// aligned once with the usual backend and settings; there is no
+    /// bootstrap, refinement, extension or block repair, so the consensus is
+    /// never revised (`--bootstrap-cons` refines from its starting point and
+    /// can change every base). The first record of the FASTA is used.
+    #[arg(
+        long = "fixed-cons",
+        value_name = "FASTA",
+        conflicts_with_all = ["bootstrap_cons", "num", "genome"]
+    )]
+    fixed_cons: Option<PathBuf>,
+
     /// Suppress the progress report on stderr.
     #[arg(long, default_value_t = false)]
     silent: bool,
@@ -805,7 +821,7 @@ fn write_stockholm<W: Write>(
 ) -> anyhow::Result<()> {
     // `#=GC RF` needs the consensus in the alignment's own column coordinates,
     // not the ungapped form the caller reports.
-    let gapped = cons_core::gapped_consensus(&r.msa, params);
+    let gapped = gapped_consensus(r, params);
 
     let mut buf: Vec<u8> = Vec::new();
     dfam_stk_io::msa::write(&r.msa, &mut buf, Some(&r.name), Some(&gapped), false)?;
@@ -1048,8 +1064,57 @@ Kimura {:.2}% (CpG-adjusted {:.2}%)",
 }
 
 /// The gapped consensus for a finished refinement, in the MSA's own columns.
+///
+/// A `--fixed-cons` family's consensus is the supplied sequence, so it is read
+/// off the reference row rather than called from the instance rows.
 fn gapped_consensus(r: &cons_core::Refined, params: &Params) -> Vec<u8> {
+    if is_fixed(r) {
+        return r.msa.sequences[0].seq.clone();
+    }
     cons_core::gapped_consensus(&r.msa, params)
+}
+
+/// Provenance note marking a family aligned with `--fixed-cons`.
+const FIXED_NOTE: &str = "FIXED-CONSENSUS: instances aligned to the supplied consensus, not refined";
+
+fn is_fixed(r: &cons_core::Refined) -> bool {
+    r.notes.iter().any(|n| n == FIXED_NOTE)
+}
+
+/// `--fixed-cons`: one alignment of every instance to the supplied consensus.
+fn align_to_fixed<A: cons_core::AlignmentSource>(
+    a: &A,
+    seqs: &[aln_core::Sequence],
+    seed: aln_core::Sequence,
+    params: &Params,
+) -> anyhow::Result<Vec<cons_core::Refined>> {
+    let alignments = a.against_reference(&seed, seqs, None)?;
+    if alignments.is_empty() {
+        return Ok(Vec::new());
+    }
+    let score: i64 = alignments.iter().map(|(_, x)| x.score as i64).sum();
+    let norm_score = cons_core::mean_score_per_base(&alignments);
+    let msa = cons_core::build_msa(&seed, seqs, &alignments, params.insertions)?;
+    Ok(vec![cons_core::Refined {
+        name: params.base_name.clone(),
+        consensus: seed.seq.clone(),
+        // `candidates: 0` marks a supplied reference, as for `--bootstrap-cons`.
+        reference: cons_core::Reference {
+            index: usize::MAX,
+            name: seed.name.clone(),
+            score: 0,
+            runner_up: None,
+            candidates: 0,
+        },
+        score,
+        norm_score,
+        msa,
+        passes: 0,
+        converged: true,
+        stop: cons_core::StopReason::Converged,
+        trace: Vec::new(),
+        notes: vec![FIXED_NOTE.to_string()],
+    }])
 }
 
 /// One line of family state, printed at the end of every stage so the stages
@@ -1202,6 +1267,22 @@ fn compose<A: cons_core::AlignmentSource>(
     params: &Params,
     ext: Option<&ExtendOpts>,
 ) -> anyhow::Result<Vec<cons_core::Refined>> {
+    if let Some(path) = &cli.fixed_cons {
+        let seed = io::read_fasta_file(path)
+            .with_context(|| format!("reading fixed consensus {}", path.display()))?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("{} contains no sequence", path.display()))?;
+        if !cli.silent {
+            eprintln!(
+                "  aligning to the fixed consensus {} ({} bp); no refinement",
+                seed.name,
+                seed.seq.len()
+            );
+        }
+        return align_to_fixed(a, seqs, seed, params);
+    }
+
     // The main loop runs without repair; it is reinstated at the end.
     let mut deferred = params.clone();
     deferred.repair_blocks = false;
@@ -1497,8 +1578,10 @@ fn main() -> Result<()> {
     // floor above `seqs.len() - 1` gaps every column and leaves the run nothing
     // to refine. Checked here because two stages later the same mistake
     // surfaces as an empty result set, which reads like an alignment problem.
+    // `--fixed-cons` calls nothing, so the floor does not apply to it: a
+    // single instance still makes a seed alignment.
     let floor = occupancy_floor(&cli);
-    if floor > seqs.len().saturating_sub(1) {
+    if cli.fixed_cons.is_none() && floor > seqs.len().saturating_sub(1) {
         bail!(
             "--min {floor} cannot be met by {} sequence(s): the consensus is called \
              over the instances with the reference row dropped, so at most {} can \
