@@ -3,8 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## Unreleased
+## 0.6.8 - 2026-10-28
 ### Fixed
+- --fixed-cons <FASTA>: align the instances to a final consensus once and
+  write it, unrefined, as #=GC RF (no bootstrap, refinement, extension or
+  block repair); a single instance is enough
 - stk lint: an RF line made only of 'X'/'x' and gaps is a legacy occupancy
   mask, not a called consensus, and is no longer compared against the
   consensus. This removes most of the warnings on unedited DR families

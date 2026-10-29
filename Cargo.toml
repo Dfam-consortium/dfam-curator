@@ -6,7 +6,7 @@ resolver = "2"
 # The consensus-building tools live here alongside linup/stk/discoord; the
 # alignment foundation they sit on is dfam-lib, consumed from its published tag.
 [workspace.package]
-version = "0.6.7"
+version = "0.6.8"
 edition = "2021"
 license = "CC0-1.0"
 
