@@ -339,7 +339,7 @@ dependencies = [
 
 [[package]]
 name = "cons-core"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "aln-coord",
  "aln-core",
@@ -454,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "dfam-curator"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "aln-coord",
  "aln-core",
@@ -1262,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "recover-seeds"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "aln-coord",
  "aln-core",
@@ -1619,7 +1619,7 @@ dependencies = [
 
 [[package]]
 name = "te-composer"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "aln-coord",
  "aln-core",

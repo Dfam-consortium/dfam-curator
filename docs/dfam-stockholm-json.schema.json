@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Dfam-consortium/dfam-curator/docs/dfam-stockholm-json.schema.json",
+  "title": "Dfam Stockholm JSON",
+  "description": "JSON form of a Dfam seed alignment (Stockholm 1.0) file, version 1.x. See docs/dfam-stockholm-json.md. Structural only: the Dfam content rules (required fields, ID/DE length, classification, taxonomy, ...) are checked by `stk lint`.",
+  "type": "object",
+  "required": ["format", "version", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "dfam-stockholm-json" },
+    "version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name":                    { "type": "string", "description": "#=GF ID" },
+        "accession":               { "type": "string", "description": "#=GF AC" },
+        "description":             { "type": "string", "description": "#=GF DE" },
+        "authors":                 { "type": "array", "items": { "$ref": "#/$defs/author" }, "description": "#=GF AU" },
+        "source":                  { "type": "string", "description": "#=GF SE" },
+        "classification":          { "type": "string", "description": "#=GF TP" },
+        "clades":                  { "type": "array", "items": { "type": "string" }, "description": "#=GF OC, one per line" },
+        "target_site_duplication": { "type": "string", "description": "#=GF TD" },
+        "consensus_type":          { "type": "string", "description": "#=GF CT" },
+        "kimura_divergence":       { "type": "number", "description": "#=GF KD" },
+        "build_method":            { "type": "string", "description": "#=GF BM" },
+        "references":              { "type": "array", "items": { "$ref": "#/$defs/reference" }, "description": "#=GF RN blocks" },
+        "database_references":     { "type": "array", "items": { "type": "string" }, "description": "#=GF DR, one per line" },
+        "comments":                { "type": "array", "items": { "type": "string" }, "description": "#=GF CC, one per line" },
+        "features":                { "type": "array", "items": { "$ref": "#/$defs/feature" }, "description": "#=GF FT" },
+        "curator_notes":           { "type": "array", "items": { "type": "string" }, "description": "#=GF **, one per line" },
+        "other_gf": {
+          "type": "array",
+          "description": "Any other #=GF line, in document order",
+          "items": {
+            "type": "object",
+            "required": ["tag", "value"],
+            "additionalProperties": false,
+            "properties": { "tag": { "type": "string" }, "value": { "type": "string" } }
+          }
+        },
+        "reference_annotation": { "type": "string", "description": "#=GC RF, gapped (one character per alignment column). Dfam's consensus is this line with the gaps removed" },
+        "model_mask":           { "type": "string", "description": "#=GC MM, gapped" },
+        "other_gc": {
+          "type": "object",
+          "description": "Any other #=GC line, keyed by tag",
+          "additionalProperties": { "type": "string" }
+        },
+        "sequences": { "type": "array", "items": { "$ref": "#/$defs/sequence" } }
+      }
+    },
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name":  { "type": "string" },
+        "orcid": { "type": "string", "description": "Bare identifier, without the ORCID: prefix" }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "required": ["number"],
+      "additionalProperties": false,
+      "properties": {
+        "number":    { "type": "integer", "minimum": 0, "description": "#=GF RN [n]" },
+        "pubmed_id": { "type": "string", "description": "#=GF RM" },
+        "doi":       { "type": "string", "description": "#=GF RD" },
+        "title":     { "type": "string", "description": "#=GF RT (not imported by Dfam)" },
+        "authors":   { "type": "string", "description": "#=GF RA (not imported by Dfam)" },
+        "location":  { "type": "string", "description": "#=GF RL (not imported by Dfam)" }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["key", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "key":      { "type": "string" },
+        "location": { "type": "string", "description": "1-based on the ungapped consensus; descending coordinates mean the minus strand" },
+        "qualifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name":  { "type": "string" },
+              "value": { "type": ["string", "null"], "description": "Unquoted; null for a valueless qualifier such as /pseudo" }
+            }
+          }
+        }
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "required": ["id", "aligned"],
+      "additionalProperties": false,
+      "properties": {
+        "id":      { "type": "string", "description": "Row name exactly as written; authoritative" },
+        "aligned": { "type": "string", "description": "Gapped sequence, one character per alignment column" },
+        "coordinates": {
+          "type": "object",
+          "description": "Derived from id (Smitten); written for convenience, ignored on input",
+          "required": ["sequence", "start", "end"],
+          "additionalProperties": false,
+          "properties": {
+            "assembly": { "type": "string" },
+            "sequence": { "type": "string" },
+            "start":    { "type": "integer", "minimum": 1 },
+            "end":      { "type": "integer", "minimum": 1 },
+            "strand":   { "enum": ["+", "-"] }
+          }
+        }
+      }
+    }
+  }
+}

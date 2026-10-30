@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## 0.6.9 - 2026-10-30
+## 0.6.10 - 2026-10-30
 ### Added
 - stk convert --to comsa: write the (cleaned) Stockholm output as a CoMSA
   archive (.smsac) using comsa-rs 0.1.2. The archive decompresses to exactly
