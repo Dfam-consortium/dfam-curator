@@ -150,12 +150,19 @@ OPTIONS:
     --cache-dir <PATH>          Override the cache directory
                                   (default: $STK_CACHE_DIR, then ~/.cache/stk)
     --min-severity <LEVEL>      Minimum severity to report: error | warn | info  [default: info]
+    --format <FORMAT>           Findings as text (tab-separated) or json  [default: text]
     --no-cache-warn             Suppress notices about missing tier-2 cache files
     --genome <FILE>             Reference genome (FASTA or .2bit) for coordinate validation
     --no-network                Skip live validation of PubMed IDs (RM) and DOIs (RD)
 ```
 
-Exit status: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
+Exit status: 0 = clean, 1 = at least one ERROR, 2 = lint could not run (unreadable
+or unsupported input, I/O error).
+
+`--format json` writes the findings as one JSON document for programs that run lint;
+see [docs/stk-lint-json.md](docs/stk-lint-json.md). A file with no Stockholm record
+at all (FASTA, EMBL or plain text given by mistake, or an empty file) is reported as
+the ERROR `no_records`; it does not lint clean.
 
 Checks include: Stockholm structure, required annotation fields, record terminator,
 duplicate IDs (with AC-aware severity), RF/consensus agreement, non-standard gap
@@ -261,6 +268,8 @@ OPTIONS:
                            raw-seqs   Ungapped FASTA, one entry per instance
                            consensus  Recalculated consensus per record (FASTA)
                            reference  Stored #=GC RF line per record (FASTA; STK input only)
+                           comsa      CoMSA archive (.smsac) of the Stockholm output
+                           json       Dfam Stockholm JSON of the Stockholm output
     --select <SELECT>    Process only the matching record (Stockholm input only)
     -o, --out <FILE>     Write output to FILE instead of stdout
     --no-clean           Emit Stockholm output verbatim (skip clean-on-write normalization)
@@ -270,7 +279,37 @@ OPTIONS:
 stk convert --to stk Mariner-N5_CyaStr.aln     # Repbase IG MSA → Stockholm
 stk convert --to msa families.stk
 stk convert --to consensus families.stk
+stk convert --to comsa -o families.smsac families.stk
+stk convert -o families.stk families.smsac         # CoMSA archive → Stockholm
+stk convert --to json -o families.json families.stk
+stk convert -o families.stk families.json          # JSON → Stockholm
 ```
+
+`--to comsa` compresses the records with [comsa-rs](https://github.com/Dfam-consortium/comsa-rs),
+a Rust port of [CoMSA](https://github.com/refresh-bio/CoMSA) (Deorowicz *et al.*,
+*Bioinformatics* 35:227, 2019). The records are cleaned exactly as for `--to stk`
+(unless `--no-clean` is given), so decompressing the archive (`comsa-rs Sd` or
+CoMSA 1.1 `Sd`) gives the file that `--to stk` would have written. The output is
+binary: give `--out`, or redirect stdout to a file. CoMSA cannot store a record
+that repeats a sequence name, so such records are rejected and no output is left
+behind.
+
+CoMSA archives are also accepted as input, by every `stk` subcommand that reads
+Stockholm (`lint`, `extract`, `edit`, `convert`, `map-consensus`). The archive is
+recognised by its content, not its extension, and decompressed one family at a
+time. For `convert`, the default target for an archive is Stockholm, so
+`stk convert families.smsac` decompresses it.
+
+`--to json` writes [Dfam Stockholm JSON](docs/dfam-stockholm-json.md), a JSON form
+of the same records for programs that ingest seed alignments (JSON Schema:
+[docs/dfam-stockholm-json.schema.json](docs/dfam-stockholm-json.schema.json)).
+Records are cleaned as for `--to stk`. A record whose structure the JSON cannot
+hold, such as two `DE` lines or an `RM` before any `RN`, is refused with an error
+and no output is left behind. `stk lint` reports all of these as errors, so a
+lint-clean file always converts. `stk convert` also reads JSON, recognised by its
+content, so `stk convert families.json` writes it back out as Stockholm. Stockholm
+remains the interchange format: the other subcommands (`lint`, `extract`, `edit`,
+`map-consensus`) refuse JSON input and point you to `convert`.
 
 ---
 
@@ -550,6 +589,10 @@ Requires `curl` and `unzip` to be available on `PATH`.
   what a seed record is, the Stockholm 1.0 format, required and optional metadata fields,
   sequence identifier conventions (Smitten format), and annotated examples ranging from
   a minimal valid record to a full submission.
+- **[docs/dfam-stockholm-json.md](docs/dfam-stockholm-json.md)** — The JSON form of a
+  Dfam Stockholm file written and read by `stk` (with a JSON Schema).
+- **[docs/stk-lint-json.md](docs/stk-lint-json.md)** — The JSON findings report of
+  `stk lint --format json`.
 
 ---
 
@@ -568,3 +611,8 @@ This project is released under the
 [CC0 1.0 Universal Public Domain Dedication](LICENSE).
 To the extent possible under law, the authors have waived all copyright and
 related rights to this software.
+
+The `stk` binary links [comsa-rs](https://github.com/Dfam-consortium/comsa-rs),
+which is licensed under GPL-3.0-only, for `stk convert --to comsa`. Compiled
+`stk` binaries are therefore distributed under the terms of the GPL-3.0; the
+dfam-curator source code itself remains CC0.

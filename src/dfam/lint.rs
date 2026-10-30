@@ -493,6 +493,24 @@ pub fn check_citations_network(records: &[RawDfamRecord]) -> Vec<(String, Diagno
     out
 }
 
+/// Report a file that holds no Stockholm record at all.
+///
+/// The reader skips everything before a `# STOCKHOLM` header, so a FASTA, EMBL or
+/// plain-text file given by mistake parses as zero records, and with no records
+/// every other check is silent.  Without this a wrong file would lint clean.
+///
+/// Returns a file-level diagnostic (the caller prints it with label `FILE`).
+pub fn check_no_records(records: &[RawDfamRecord]) -> Vec<Diagnostic> {
+    if records.is_empty() {
+        vec![err(
+            "no_records",
+            "no Stockholm records found: the file has no '# STOCKHOLM 1.0' header",
+        )]
+    } else {
+        Vec::new()
+    }
+}
+
 fn pmid_exists(pmid: &str) -> bool {
     let url = format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid);
     match ureq::head(&url)
@@ -1556,6 +1574,15 @@ fn tier2_id(r: &RawDfamRecord, cache: &Cache, d: &mut Vec<Diagnostic>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn no_records_is_an_error() {
+        let d = check_no_records(&[]);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].check, "no_records");
+        assert_eq!(d[0].severity, Severity::Error);
+        assert!(check_no_records(&[RawDfamRecord::default()]).is_empty());
+    }
+
     use super::*;
     use crate::dfam::cache::Cache;
     use crate::dfam::record::{RawDfamRecord, SeqRow};

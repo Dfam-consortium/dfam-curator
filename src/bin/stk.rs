@@ -3,17 +3,18 @@
 /// Subcommands:
 ///   lint     Validate one or more STK files and report diagnostics.
 ///   edit     Modify #=GF annotation fields across records.
-///   convert  Convert between alignment formats (STK, MSA, raw-seqs, consensus, reference).
+///   convert  Convert between alignment formats (STK, JSON, MSA, raw-seqs, consensus, reference).
 ///   map-consensus  Map a hand-built consensus onto a record's alignment as #=GC RF.
 ///
-/// Exit status for `lint`: 0 = clean, 1 = at least one ERROR, 2 = I/O failure.
-/// Exit status for `edit`: 0 = success, 2 = I/O failure.
+/// Exit status for `lint`: 0 = clean, 1 = at least one ERROR, 2 = failure to run
+/// (unreadable or unsupported input, I/O error).
+/// Exit status for every other subcommand: 0 = success, 2 = failure.
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::{BufReader, BufWriter, Write};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 
 use aln_core::consensus::{build_consensus_from_sequences, ConsensusParams};
 use dfam_curator::{
@@ -22,15 +23,15 @@ use dfam_curator::{
         clean::{clean_record, CleanReport},
         edit::{apply_ops, Op},
         lint::{check_ac_summary, check_automated_name_summary, check_citations_network,
-               check_duplicate_ids, check_orcid_summary, check_seqid_format_summary,
+               check_duplicate_ids, check_no_records, check_orcid_summary, check_seqid_format_summary,
                check_taxon_name, check_unused_citation_fields, dfam_name_exists,
                lint_record, rf_is_handcurated, Diagnostic, Severity},
         record::{iter_records, iter_records_raw, RawDfamRecord},
         repbase::{to_stk_record, RepbaseImport},
     },
     io::{
-        clustal, detect_format, fasta, ig_family, ig_msa, read_alignment, stockholm,
-        Format,
+        clustal, detect_format, dfam_json, fasta, ig_family, ig_msa, read_alignment,
+        stockholm, Format,
     },
 };
 
@@ -65,8 +66,16 @@ enum Cmd {
     MapConsensus(MapConsensusArgs),
 }
 
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+fn main() {
+    // Exit 2 on any failure, so that `lint`'s 1 always means "found errors" and a
+    // caller can tell a lint failure from a run that never happened.
+    if let Err(e) = run(Cli::parse()) {
+        eprintln!("Error: {:?}", e);
+        std::process::exit(2);
+    }
+}
+
+fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Cmd::Lint(args)    => run_lint(args),
         Cmd::Edit(args)    => run_edit(args),
@@ -96,7 +105,18 @@ impl From<MinSev> for Severity {
     }
 }
 
+/// How `stk lint` writes its findings.
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum LintFormat {
+    /// One tab-separated line per finding: FILE, RECORD, SEVERITY, CHECK, MESSAGE.
+    Text,
+    /// One JSON document listing every finding (docs/stk-lint-json.md).
+    Json,
+}
+
 #[derive(Args, Debug)]
+#[command(after_help = "Exit status: 0 = no ERROR findings, 1 = at least one ERROR, \
+                        2 = lint could not run (unreadable or unsupported input, I/O error).")]
 struct LintArgs {
     /// One or more Stockholm files to check.
     #[arg(required = true)]
@@ -110,6 +130,11 @@ struct LintArgs {
     /// Minimum severity to report.
     #[arg(long, value_enum, default_value = "info")]
     min_severity: MinSev,
+
+    /// Output format for the findings.  Progress and cache notices always go to
+    /// stderr as text.
+    #[arg(long, value_enum, default_value = "text")]
+    format: LintFormat,
 
     /// Suppress informational notices about missing tier-2 cache files.
     #[arg(long)]
@@ -137,6 +162,13 @@ struct LintArgs {
 }
 
 fn run_lint(args: LintArgs) -> anyhow::Result<()> {
+    // Refuse a JSON input before refreshing the cache or loading a genome.
+    for path in &args.input {
+        if is_json(path)? {
+            anyhow::bail!(json_not_stockholm(path));
+        }
+    }
+
     let min_sev: Severity = args.min_severity.into();
     let cdir = args.cache_dir.unwrap_or_else(cache_dir);
 
@@ -176,18 +208,16 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
     };
 
     let cache_ref = Some(&cache);
-    let mut any_error = false;
+    let mut sink = LintSink::new(args.format, min_sev);
 
     for path in &args.input {
         let filename = path.display().to_string();
-        let f = std::fs::File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let f = open_stk(path)?;
         let mut records: Vec<RawDfamRecord> = Vec::new();
 
-        for result in iter_records(BufReader::new(f)) {
+        for result in iter_records(f) {
             let record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
-            let label = record.label();
 
             let mut all_diags = lint_record(&record, cache_ref);
             if let Some(ref gmap) = genome_map {
@@ -195,47 +225,131 @@ fn run_lint(args: LintArgs) -> anyhow::Result<()> {
             }
 
             for d in &all_diags {
-                if d.severity >= min_sev {
-                    if d.severity == Severity::Error {
-                        any_error = true;
-                    }
-                    println!(
-                        "{}\t{}\t{}\t{}\t{}",
-                        filename, label, d.severity, d.check, d.message
-                    );
-                }
+                sink.emit(&filename, Some(&record), d);
             }
             records.push(record);
         }
 
-        for d in check_duplicate_ids(&records).into_iter()
+        for d in check_no_records(&records).into_iter()
+            .chain(check_duplicate_ids(&records))
             .chain(check_unused_citation_fields(&records))
             .chain(check_ac_summary(&records))
             .chain(check_orcid_summary(&records))
             .chain(check_seqid_format_summary(&records))
             .chain(check_automated_name_summary(&records))
         {
-            if d.severity >= min_sev {
-                if d.severity == Severity::Error {
-                    any_error = true;
-                }
-                println!("{}\tFILE\t{}\t{}\t{}", filename, d.severity, d.check, d.message);
-            }
+            sink.emit(&filename, None, &d);
         }
 
         if !args.no_network {
             for (label, d) in check_citations_network(&records) {
-                if d.severity >= min_sev {
-                    if d.severity == Severity::Error {
-                        any_error = true;
-                    }
-                    println!("{}\t{}\t{}\t{}\t{}", filename, label, d.severity, d.check, d.message);
-                }
+                let record = records.iter().find(|r| r.label() == label);
+                sink.emit(&filename, record, &d);
             }
+        }
+        sink.file_done(&filename, records.len());
+    }
+
+    let any_error = sink.finish()?;
+    std::process::exit(if any_error { 1 } else { 0 });
+}
+
+/// Where `stk lint` findings go: printed as they arrive (text), or collected and
+/// written as one document at the end (JSON).
+struct LintSink {
+    format: LintFormat,
+    min_sev: Severity,
+    any_error: bool,
+    files: Vec<LintFileJson>,
+    findings: Vec<LintFindingJson>,
+}
+
+/// `stk lint --format json` document; specified in docs/stk-lint-json.md.
+#[derive(serde::Serialize)]
+struct LintReportJson<'a> {
+    format: &'static str,
+    version: &'static str,
+    /// `true` when there is at least one ERROR finding (exit status 1).
+    errors: bool,
+    files: &'a [LintFileJson],
+    findings: &'a [LintFindingJson],
+}
+
+#[derive(serde::Serialize)]
+struct LintFileJson {
+    path: String,
+    records: usize,
+}
+
+#[derive(serde::Serialize)]
+struct LintFindingJson {
+    file: String,
+    /// `None` for a file-level finding (`FILE` in text output).
+    record: Option<LintRecordJson>,
+    severity: String,
+    check: &'static str,
+    message: String,
+}
+
+#[derive(serde::Serialize)]
+struct LintRecordJson {
+    /// 1-based position of the record in the file.
+    number: usize,
+    /// `#=GF ID`, when the record has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+}
+
+impl LintSink {
+    fn new(format: LintFormat, min_sev: Severity) -> Self {
+        LintSink { format, min_sev, any_error: false, files: Vec::new(), findings: Vec::new() }
+    }
+
+    fn emit(&mut self, file: &str, record: Option<&RawDfamRecord>, d: &Diagnostic) {
+        if d.severity < self.min_sev {
+            return;
+        }
+        if d.severity == Severity::Error {
+            self.any_error = true;
+        }
+        match self.format {
+            LintFormat::Text => {
+                let label = record.map_or_else(|| "FILE".to_string(), |r| r.label());
+                println!("{}\t{}\t{}\t{}\t{}", file, label, d.severity, d.check, d.message);
+            }
+            LintFormat::Json => self.findings.push(LintFindingJson {
+                file: file.to_string(),
+                record: record.map(|r| LintRecordJson {
+                    number: r.record_num,
+                    name: r.gf_first("ID").map(str::trim).filter(|s| !s.is_empty()).map(String::from),
+                }),
+                severity: d.severity.to_string(),
+                check: d.check,
+                message: d.message.clone(),
+            }),
         }
     }
 
-    std::process::exit(if any_error { 1 } else { 0 });
+    fn file_done(&mut self, path: &str, records: usize) {
+        self.files.push(LintFileJson { path: path.to_string(), records });
+    }
+
+    /// Write the JSON document, if any; returns whether an ERROR was reported.
+    fn finish(self) -> anyhow::Result<bool> {
+        if self.format == LintFormat::Json {
+            let report = LintReportJson {
+                format: "stk-lint-json",
+                version: "1.0",
+                errors: self.any_error,
+                files: &self.files,
+                findings: &self.findings,
+            };
+            let mut out = std::io::stdout().lock();
+            serde_json::to_writer_pretty(&mut out, &report)?;
+            writeln!(out)?;
+        }
+        Ok(self.any_error)
+    }
 }
 
 /// Run DisCoord phase-1 coordinate validation on the sequences in one record.
@@ -346,10 +460,9 @@ fn run_extract(args: ExtractArgs) -> anyhow::Result<()> {
     let mut found = false;
     let mut clean_report = CleanReport::default();
     for path in &args.input {
-        let f = std::fs::File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let f = open_stk(path)?;
 
-        for result in iter_records(BufReader::new(f)) {
+        for result in iter_records(f) {
             let mut record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
 
@@ -583,10 +696,9 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
     let mut clean_report = CleanReport::default();
 
     for path in &args.input {
-        let f = std::fs::File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let f = open_stk(path)?;
 
-        for result in iter_records_raw(BufReader::new(f)) {
+        for result in iter_records_raw(f) {
             let mut record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
 
@@ -627,6 +739,153 @@ fn run_edit(args: EditArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ── Stockholm input (plain or CoMSA; JSON in convert only) ──────────────────
+
+/// Open a Stockholm input for record iteration.  A CoMSA archive (.smsac) is
+/// recognised by content and decompressed one family at a time, so every
+/// subcommand that reads Stockholm also reads CoMSA without holding the whole
+/// archive's text in memory.
+///
+/// A Dfam Stockholm JSON document is refused: Stockholm is the interchange
+/// format, and only `stk convert` reads JSON (see [`open_convert_input`]).
+/// Read as Stockholm, a JSON file would silently yield no records.
+fn open_stk(path: &Path) -> anyhow::Result<Box<dyn BufRead + Send>> {
+    let f = std::fs::File::open(path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+    let reader: Box<dyn BufRead + Send> = match comsa_archive(f)
+        .with_context(|| format!("cannot read {}", path.display()))?
+    {
+        Ok(arc) => Box::new(ComsaStockholm::new(arc)),
+        Err(f) => {
+            let mut r = BufReader::new(f);
+            if dfam_json::looks_like_json(r.fill_buf()?) {
+                anyhow::bail!(json_not_stockholm(path));
+            }
+            Box::new(r)
+        }
+    };
+    Ok(reader)
+}
+
+/// `stk convert`'s input: as [`open_stk`], but a JSON document is also accepted,
+/// read whole and rewritten as Stockholm.
+fn open_convert_input(path: &Path) -> anyhow::Result<Box<dyn BufRead + Send>> {
+    if is_json(path)? {
+        let f = std::fs::File::open(path)
+            .with_context(|| format!("cannot open {}", path.display()))?;
+        return Ok(Box::new(std::io::Cursor::new(json_as_stockholm(BufReader::new(f), path)?)));
+    }
+    open_stk(path)
+}
+
+/// The error for a JSON input given to a subcommand other than `convert`.
+fn json_not_stockholm(path: &Path) -> String {
+    format!(
+        "{} is Dfam Stockholm JSON, which only stk convert reads; \
+         convert it to Stockholm first (stk convert -o FILE.stk {})",
+        path.display(),
+        path.display()
+    )
+}
+
+/// True if `path` is a Dfam Stockholm JSON document.
+fn is_json(path: &Path) -> anyhow::Result<bool> {
+    let f = std::fs::File::open(path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+    let mut head = Vec::with_capacity(4096);
+    f.take(4096).read_to_end(&mut head)?;
+    Ok(dfam_json::looks_like_json(&head))
+}
+
+/// Read a JSON document and return the Stockholm text of its records.
+fn json_as_stockholm(r: impl Read, path: &Path) -> anyhow::Result<Vec<u8>> {
+    let doc = dfam_json::read_document(r)
+        .with_context(|| format!("cannot read {} as Dfam Stockholm JSON", path.display()))?;
+    let mut text = Vec::new();
+    for (i, j) in doc.records.iter().enumerate() {
+        dfam_json::to_record(j, i + 1)
+            .with_context(|| format!("cannot write {} as Stockholm", path.display()))?
+            .write_to(&mut text)?;
+    }
+    Ok(text)
+}
+
+/// True if `path` is a CoMSA archive.
+fn is_comsa(path: &Path) -> anyhow::Result<bool> {
+    let f = std::fs::File::open(path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+    Ok(comsa_archive(f)?.is_ok())
+}
+
+/// `Ok(archive)` if `f` is a CoMSA archive, otherwise `Err(f)` rewound to the start.
+///
+/// CoMSA has no magic number.  An archive starts with an 8-byte little-endian
+/// length (of the first block, or of the footer when empty), whose high byte is
+/// NUL, which no text file has; the footer must then parse.
+fn comsa_archive(
+    mut f: std::fs::File,
+) -> std::io::Result<Result<comsa::archive::ArchiveReader<std::fs::File>, std::fs::File>> {
+    let mut head = Vec::with_capacity(8);
+    (&mut f).take(8).read_to_end(&mut head)?;
+    f.seek(SeekFrom::Start(0))?;
+    if head.len() < 8 || head[7] != 0 {
+        return Ok(Err(f));
+    }
+    match comsa::archive::ArchiveReader::open(f.try_clone()?) {
+        Ok(arc) => Ok(Ok(arc)),
+        Err(_) => {
+            f.seek(SeekFrom::Start(0))?;
+            Ok(Err(f))
+        }
+    }
+}
+
+/// Stockholm text of a CoMSA archive, decompressed family by family on demand.
+struct ComsaStockholm {
+    arc: comsa::archive::ArchiveReader<std::fs::File>,
+    next: usize,
+    threads: usize,
+    buf: Vec<u8>,
+    pos: usize,
+}
+
+impl ComsaStockholm {
+    fn new(arc: comsa::archive::ArchiveReader<std::fs::File>) -> Self {
+        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        ComsaStockholm { arc, next: 0, threads, buf: Vec::new(), pos: 0 }
+    }
+}
+
+impl BufRead for ComsaStockholm {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        while self.pos == self.buf.len() && self.next < self.arc.families().len() {
+            let family = self
+                .arc
+                .read_family(self.next, self.threads)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+            self.next += 1;
+            self.buf.clear();
+            self.pos = 0;
+            comsa::stockholm::write_family(&mut self.buf, &family)?;
+        }
+        Ok(&self.buf[self.pos..])
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.pos = (self.pos + amt).min(self.buf.len());
+    }
+}
+
+impl Read for ComsaStockholm {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let avail = self.fill_buf()?;
+        let n = avail.len().min(out.len());
+        out[..n].copy_from_slice(&avail[..n]);
+        self.consume(n);
+        Ok(n)
+    }
+}
+
 // ── convert subcommand ────────────────────────────────────────────────────────
 
 #[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
@@ -643,29 +902,48 @@ enum OutFormat {
     Consensus,
     /// Stored RF / reference line(s) as FASTA (Stockholm input only).
     Reference,
+    /// CoMSA archive (.smsac) of the Stockholm output; binary.
+    Comsa,
+    /// Dfam Stockholm JSON (docs/dfam-stockholm-json.md).
+    Json,
 }
 
 #[derive(Args, Debug)]
 #[command(
     about = "Convert alignment files between formats",
-    after_help = "Input format is auto-detected (Stockholm, FASTA/A2M, crossmatch).\n\n\
+    after_help = "Input format is auto-detected (Stockholm, CoMSA archive, Dfam Stockholm JSON,\n\
+                  FASTA/A2M, crossmatch).\n\n\
                   OUTPUT FORMATS\n  \
                   stk        Full MSA → Stockholm 1.0 (default target)\n  \
                   msa        Full MSA → aligned FASTA / A2M (gapped)\n  \
                   aln        Full MSA → Clustal ALN interleaved\n  \
                   raw-seqs   Instances → ungapped FASTA, provenance in description\n  \
                   consensus  Recalculated consensus per record → FASTA\n  \
-                  reference  Stored #=GC RF line per record → FASTA (STK input only)\n\n\
+                  reference  Stored #=GC RF line per record → FASTA (STK input only)\n  \
+                  comsa      Stockholm output → CoMSA archive (.smsac), readable by\n  \
+                             CoMSA 1.1 and comsa-rs\n  \
+                  json       Stockholm output → Dfam Stockholm JSON\n\n\
                   NOTES\n  \
                   Converting to the same format as the input requires an explicit --to flag.\n  \
                   --select is only valid for Stockholm input.\n  \
-                  --to reference requires Stockholm input; records without an RF line are skipped.\n\n\
+                  --to reference requires Stockholm input; records without an RF line are skipped.\n  \
+                  --to comsa writes binary output: give --out, or redirect stdout to a file.\n  \
+                  A CoMSA archive input is read as the Stockholm it decompresses to; the\n  \
+                  default --to stk decompresses it.\n  \
+                  A JSON input is read as the Stockholm it describes; the default --to stk\n  \
+                  writes that Stockholm.  --to json refuses a record the JSON cannot hold\n  \
+                  (e.g. two DE lines, RM before RN, SQ not matching the rows); stk lint\n  \
+                  reports each of these as an error.\n\n\
                   EXAMPLES\n  \
                   stk convert foo.msa\n  \
                   stk convert --to aln foo.stk\n  \
                   stk convert --to msa foo.stk\n  \
                   stk convert --to consensus families.stk\n  \
                   stk convert --to reference --select MyFam families.stk\n  \
+                  stk convert --to comsa --out families.smsac families.stk\n  \
+                  stk convert -o families.stk families.smsac\n  \
+                  stk convert --to json -o families.json families.stk\n  \
+                  stk convert -o families.stk families.json\n  \
                   stk convert --to stk --out round-trip.stk foo.stk"
 )]
 struct ConvertArgs {
@@ -682,25 +960,32 @@ struct ConvertArgs {
     #[arg(long, short = 'o', value_name = "FILE")]
     out: Option<PathBuf>,
 
-    /// Do not clean records on write (Stockholm output only).
+    /// Do not clean records on write (Stockholm, CoMSA and JSON output only).
     /// By default STK output is normalized to Dfam conventions
     /// (gap characters -, _, ~ → '.'; 7-digit AC widened to 9 digits).
     #[arg(long)]
     no_clean: bool,
 
-    /// Input alignment file (Stockholm, FASTA/A2M, or crossmatch .align).
+    /// Input alignment file (Stockholm, CoMSA archive, Dfam Stockholm JSON, FASTA/A2M,
+    /// or crossmatch .align).
     #[arg(required = true)]
     input: PathBuf,
 }
 
 fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
-    let fmt = detect_format(&args.input)
-        .with_context(|| format!("cannot detect format of {}", args.input.display()))?;
+    // A CoMSA archive or a JSON document is read as the Stockholm it holds.
+    let from_container = is_comsa(&args.input)? || is_json(&args.input)?;
+    let fmt = if from_container {
+        Format::Stockholm
+    } else {
+        detect_format(&args.input)
+            .with_context(|| format!("cannot detect format of {}", args.input.display()))?
+    };
 
     let to = args.to.as_ref().unwrap_or(&OutFormat::Stk);
 
     let same_fmt = match fmt {
-        Format::Stockholm => *to == OutFormat::Stk,
+        Format::Stockholm => *to == OutFormat::Stk && !from_container,
         Format::Clustal   => *to == OutFormat::Aln,
         Format::Fasta     => *to == OutFormat::Msa,
         Format::Crossmatch => false,
@@ -734,6 +1019,9 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
     if args.select.is_some() && fmt != Format::Stockholm {
         anyhow::bail!("--select only applies to Stockholm input");
     }
+    if *to == OutFormat::Comsa && args.out.is_none() && std::io::stdout().is_terminal() {
+        anyhow::bail!("--to comsa writes a binary archive; use --out FILE or redirect stdout");
+    }
 
     let mut output: Box<dyn Write> = match &args.out {
         None => Box::new(BufWriter::new(std::io::stdout())),
@@ -749,7 +1037,44 @@ fn run_convert(args: ConvertArgs) -> anyhow::Result<()> {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "input".to_string());
 
-    if fmt == Format::Stockholm {
+    if *to == OutFormat::Comsa || *to == OutFormat::Json {
+        let result = (|| -> anyhow::Result<()> {
+            if fmt == Format::Stockholm {
+                let report = if *to == OutFormat::Comsa {
+                    convert_stk_to_comsa(&args.input, args.select.as_deref(), args.no_clean, &mut output)?
+                } else {
+                    convert_stk_to_json(&args.input, args.select.as_deref(), args.no_clean, &mut output)?
+                };
+                output.flush()?;
+                report_clean("stk convert", &report);
+            } else {
+                let msa = read_alignment(&args.input)
+                    .with_context(|| format!("failed to read {}", args.input.display()))?;
+                let consensus = compute_consensus(&msa);
+                let mut text = Vec::new();
+                stockholm::write(&msa, &mut text, Some(&stem), Some(&consensus), false)?;
+                if *to == OutFormat::Comsa {
+                    write_comsa(std::iter::once(comsa_family(&text)), &mut output)?;
+                } else {
+                    let mut json = dfam_json::JsonWriter::new(&mut output)?;
+                    for record in iter_records(text.as_slice()) {
+                        json.write_record(&dfam_json::from_record(&record?)?)?;
+                    }
+                    json.finish()?;
+                }
+                output.flush()?;
+            }
+            Ok(())
+        })();
+        // A partial archive or JSON document is unreadable; don't leave one behind.
+        if result.is_err() {
+            if let Some(p) = &args.out {
+                drop(output);
+                let _ = std::fs::remove_file(p);
+            }
+        }
+        return result;
+    } else if fmt == Format::Stockholm {
         let report =
             convert_stk_input(&args.input, to, args.select.as_deref(), &stem, args.no_clean, &mut output)?;
         output.flush()?;
@@ -772,12 +1097,11 @@ fn convert_stk_input(
     no_clean: bool,
     out: &mut Box<dyn Write>,
 ) -> anyhow::Result<CleanReport> {
-    let f = std::fs::File::open(path)
-        .with_context(|| format!("cannot open {}", path.display()))?;
+    let f = open_convert_input(path)?;
 
     let mut clean_report = CleanReport::default();
 
-    for result in iter_records(BufReader::new(f)) {
+    for result in iter_records(f) {
         let mut record = result.with_context(|| format!("parse error in {}", path.display()))?;
 
         if let Some(sel) = select {
@@ -817,6 +1141,87 @@ fn convert_stk_input(
         }
     }
     Ok(clean_report)
+}
+
+/// Compress the Stockholm records of `path` into a CoMSA archive.
+///
+/// Records are cleaned exactly as for `--to stk`, so the archive decompresses to
+/// the file `--to stk` would have written.  They are streamed into the
+/// compressor one at a time; the input is never held in memory whole.
+fn convert_stk_to_comsa(
+    path: &std::path::Path,
+    select: Option<&str>,
+    no_clean: bool,
+    out: &mut Box<dyn Write>,
+) -> anyhow::Result<CleanReport> {
+    let f = open_convert_input(path)?;
+
+    let mut clean_report = CleanReport::default();
+    let families = iter_records(f)
+        .filter(|r| match (r, select) {
+            (Ok(record), Some(sel)) => record_selected(record, sel),
+            _ => true,
+        })
+        .map(|r| {
+            let mut record = r.map_err(|e| {
+                comsa::Error::InvalidInput(format!("parse error in {}: {}", path.display(), e))
+            })?;
+            if !no_clean {
+                clean_report.merge(clean_record(&mut record));
+            }
+            let mut text = Vec::new();
+            record.write_to(&mut text)?;
+            comsa_family(&text)
+        });
+    write_comsa(families, out)
+        .with_context(|| format!("failed to compress {}", path.display()))?;
+    Ok(clean_report)
+}
+
+/// Write the Stockholm records of `path` as a Dfam Stockholm JSON document.
+///
+/// Records are cleaned exactly as for `--to stk` and written one at a time.  A
+/// record the JSON cannot represent stops the conversion with an error naming it.
+fn convert_stk_to_json(
+    path: &std::path::Path,
+    select: Option<&str>,
+    no_clean: bool,
+    out: &mut Box<dyn Write>,
+) -> anyhow::Result<CleanReport> {
+    let f = open_convert_input(path)?;
+
+    let mut clean_report = CleanReport::default();
+    let mut json = dfam_json::JsonWriter::new(out)?;
+    for result in iter_records(f) {
+        let mut record = result.with_context(|| format!("parse error in {}", path.display()))?;
+        if select.is_some_and(|sel| !record_selected(&record, sel)) {
+            continue;
+        }
+        if !no_clean {
+            clean_report.merge(clean_record(&mut record));
+        }
+        let j = dfam_json::from_record(&record)
+            .with_context(|| format!("cannot convert {} to JSON", path.display()))?;
+        json.write_record(&j)?;
+    }
+    json.finish()?;
+    Ok(clean_report)
+}
+
+/// Parse one record's Stockholm text into a CoMSA family, paired with its size
+/// in bytes (CoMSA stores it as the family's raw size).
+fn comsa_family(text: &[u8]) -> comsa::Result<(comsa::Family, u64)> {
+    comsa::stockholm::Reader::new(text)
+        .read_family()?
+        .ok_or_else(|| comsa::Error::InvalidInput("empty Stockholm record".to_string()))
+}
+
+fn write_comsa<I>(families: I, out: &mut Box<dyn Write>) -> anyhow::Result<()>
+where
+    I: Iterator<Item = comsa::Result<(comsa::Family, u64)>> + Send,
+{
+    comsa::archive::compress_stockholm(families, out, &comsa::CompressOptions::default(), |_| {})?;
+    Ok(())
 }
 
 /// Emit one `MultiAlign` in the requested output format.
@@ -862,6 +1267,10 @@ fn convert_one_record(
         OutFormat::Reference => {
             // Only reachable for non-STK input, which is blocked upstream.
             anyhow::bail!("--to reference requires Stockholm input");
+        }
+        OutFormat::Comsa | OutFormat::Json => {
+            // Handled by `convert_stk_to_comsa` / `convert_stk_to_json` in `run_convert`.
+            unreachable!("--to comsa and --to json are written by run_convert");
         }
     }
     Ok(())
@@ -1187,10 +1596,9 @@ fn run_map_consensus(args: MapConsensusArgs) -> anyhow::Result<()> {
     let mut thresholds_failed = false;
 
     for path in &args.input {
-        let f = std::fs::File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let f = open_stk(path)?;
 
-        for result in iter_records_raw(BufReader::new(f)) {
+        for result in iter_records_raw(f) {
             let mut record = result
                 .with_context(|| format!("parse error in {}", path.display()))?;
 

@@ -1,5 +1,6 @@
 pub mod clustal;
 pub mod crossmatch;
+pub mod dfam_json;
 pub mod fasta;
 pub mod ig_family;
 pub mod ig_msa;

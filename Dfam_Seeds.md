@@ -695,6 +695,7 @@ Common issues flagged by `stk lint`:
 
 | Check                  | Severity | Meaning                                        |
 |------------------------|----------|------------------------------------------------|
+| `no_records`           | ERROR    | The file has no `# STOCKHOLM 1.0` record at all (wrong file, or empty) |
 | `missing_required_field` | ERROR  | `DE`, `AU`, `TP`, `OC`, or `SQ` is absent     |
 | `rf_missing`           | ERROR    | `#=GC RF` line is absent                       |
 | `sq_mismatch`          | ERROR    | `SQ` count does not match actual sequence rows |

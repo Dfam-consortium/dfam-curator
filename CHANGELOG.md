@@ -3,6 +3,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 0.6.9 - 2026-10-30
+### Added
+- stk convert --to comsa: write the (cleaned) Stockholm output as a CoMSA
+  archive (.smsac) using comsa-rs 0.1.2. The archive decompresses to exactly
+  what --to stk writes and is readable by CoMSA 1.1
+- stk reads CoMSA archives as input: every subcommand that takes Stockholm
+  (lint, extract, edit, convert, map-consensus) detects an archive by content
+  and decompresses it one family at a time. `stk convert archive.smsac`
+  decompresses to Stockholm by default
+- Dfam Stockholm JSON, a JSON form of Dfam seed alignment files for programs
+  that ingest them (spec: docs/dfam-stockholm-json.md; JSON Schema alongside).
+  `stk convert --to json` writes it, and `stk convert` reads it back,
+  recognised by content. Stockholm stays the interchange format: the other
+  subcommands refuse JSON input and point to `stk convert`
+- stk lint --format json: the findings as one JSON document, for programs
+  that run lint (docs/stk-lint-json.md)
+### Fixed
+- stk lint reports a file with no Stockholm record at all as the ERROR
+  `no_records`.  A FASTA, EMBL, plain-text or empty file used to lint clean
+- stk exits with status 2 on any failure (unreadable or unsupported input, I/O
+  error), as documented.  It used to exit 1, which for `stk lint` was
+  indistinguishable from "found errors"
+### Changed
+- stk binaries now link comsa-rs (GPL-3.0-only) and are distributed under
+  the GPL-3.0; the dfam-curator sources remain CC0
+
 ## 0.6.8 - 2026-10-28
 ### Fixed
 - --fixed-cons <FASTA>: align the instances to a final consensus once and
