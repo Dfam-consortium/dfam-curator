@@ -7,6 +7,7 @@ use regex::Regex;
 use aln_core::consensus::{build_consensus_from_sequences, ConsensusParams};
 use crate::dfam::cache::Cache;
 use crate::dfam::record::RawDfamRecord;
+use crate::dfam::translate;
 use dfam_stk_io::{is_gap, IDVersion, DFAM_GAP};
 
 // ── Character sets ────────────────────────────────────────────────────────────
@@ -907,6 +908,10 @@ impl FtSegment {
     pub fn len_nt(&self) -> usize {
         self.start.abs_diff(self.end) + 1
     }
+    /// Lowest coordinate the segment touches.
+    pub fn lo(&self) -> usize {
+        self.start.min(self.end)
+    }
     /// Highest coordinate the segment touches.
     pub fn hi(&self) -> usize {
         self.start.max(self.end)
@@ -964,6 +969,9 @@ fn ellipsize(s: &str, max: usize) -> String {
 /// qualifier lines (`/product="…"`).  The leading `/` is the only thing separating
 /// the two: the Stockholm reader trims `#=GF` values, so EMBL's blank-key-column
 /// convention cannot survive a round trip and qualifier values are never wrapped.
+///
+/// Every finding here is a warning: imported Repbase records carry defects of all
+/// these kinds, and they should not stop a record being converted.
 fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
     let lines = r.gf_all("FT");
     if lines.is_empty() {
@@ -972,27 +980,28 @@ fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
 
     // Coordinates are in ungapped `#=GC RF` space.  Skip the bounds check on a
     // block-format record, whose RF is a misparse artefact (see `lint_record`).
-    let rf_len = if r.block_separator_line.is_none() {
+    let rf: Option<Vec<u8>> = if r.block_separator_line.is_none() {
         r.gc
             .get("RF")
-            .map(|rf| rf.bytes().filter(|b| !is_gap(*b)).count())
+            .map(|rf| rf.bytes().filter(|b| !is_gap(*b)).collect())
     } else {
         None
     };
+    let rf_len = rf.as_ref().map(Vec::len);
 
     let mut seen_feature = false;
-    for line in lines {
+    for (i, line) in lines.iter().enumerate() {
         let value = line.trim();
 
         if value.is_empty() {
-            d.push(err("empty_field", "FT line is present but empty"));
+            d.push(warn("empty_field", "FT line is present but empty"));
             continue;
         }
 
         // Qualifier line.
         if value.starts_with('/') {
             if !seen_feature {
-                d.push(err(
+                d.push(warn(
                     "ft_orphan_qualifier",
                     format!(
                         "FT qualifier {:?} has no feature to attach to \
@@ -1007,7 +1016,7 @@ fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
         // Feature key + location line.
         seen_feature = true;
         let Some((key, loc)) = value.split_once(char::is_whitespace) else {
-            d.push(err(
+            d.push(warn(
                 "ft_no_location",
                 format!("FT feature {:?} has no location", value),
             ));
@@ -1015,7 +1024,7 @@ fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
         };
 
         let Some(segs) = parse_ft_location(loc) else {
-            d.push(err(
+            d.push(warn(
                 "ft_location_invalid",
                 format!(
                     "FT {} location {:?} is not a valid location \
@@ -1029,7 +1038,7 @@ fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
 
         if let Some(rf_len) = rf_len {
             if let Some(bad) = segs.iter().find(|s| s.hi() > rf_len) {
-                d.push(err(
+                d.push(warn(
                     "ft_coord_out_of_range",
                     format!(
                         "FT {} location {:?} reaches position {} but the ungapped RF consensus is only {} bp",
@@ -1055,9 +1064,80 @@ fn check_ft(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
                         span
                     ),
                 ));
+            } else if let (Some(rf), Some(declared)) = (&rf, ft_translation(&lines[i + 1..])) {
+                let found = translate::translate(&ft_cds_nucleotides(rf, &segs));
+                if let Some(problem) = translation_difference(&found, declared.as_bytes()) {
+                    d.push(warn(
+                        "ft_translation_mismatch",
+                        format!(
+                            "FT CDS location {:?}: {}",
+                            ellipsize(loc.trim(), 60),
+                            problem
+                        ),
+                    ));
+                }
             }
         }
     }
+}
+
+/// The `/translation` value among the qualifier lines that follow a feature line, if any.
+/// `following` runs to the end of the FT block; the feature ends at the next non-`/` line.
+fn ft_translation<'a>(following: &[&'a str]) -> Option<&'a str> {
+    following
+        .iter()
+        .map(|l| l.trim())
+        .take_while(|l| l.starts_with('/'))
+        .find_map(|l| l.strip_prefix("/translation="))
+        .map(|v| v.trim_matches('"'))
+}
+
+/// The coding strand of a CDS: its segments concatenated in the order given, with
+/// descending (minus strand) segments reverse-complemented.  `segs` must be in range.
+fn ft_cds_nucleotides(rf: &[u8], segs: &[FtSegment]) -> Vec<u8> {
+    let mut nt = Vec::with_capacity(segs.iter().map(|s| s.len_nt()).sum());
+    for s in segs {
+        let span = &rf[s.lo() - 1..s.hi()];
+        if s.is_minus() {
+            nt.extend(span.iter().rev().map(|b| translate::complement(*b)));
+        } else {
+            nt.extend_from_slice(span);
+        }
+    }
+    nt
+}
+
+/// Describe how a stated `/translation` differs from the translated consensus, or `None`
+/// when they agree.  One terminal stop may be present on either side: Repbase locations
+/// usually exclude the stop codon, but some include it and leave it out of the protein.
+fn translation_difference(found: &[u8], declared: &[u8]) -> Option<String> {
+    let strip_stop = |p: &'_ [u8]| -> Vec<u8> {
+        let p = p.strip_suffix(b"*").unwrap_or(p);
+        p.to_ascii_uppercase()
+    };
+    let found = strip_stop(found);
+    let declared = strip_stop(declared);
+    if found == declared {
+        return None;
+    }
+    if found.len() != declared.len() {
+        return Some(format!(
+            "/translation is {} aa but the consensus translates to {} aa",
+            declared.len(),
+            found.len()
+        ));
+    }
+    let mut diffs = found.iter().zip(&declared).enumerate().filter(|(_, (a, b))| a != b);
+    let (pos, (a, b)) = diffs.next()?;
+    Some(format!(
+        "/translation differs from the translated consensus at {} of {} residues \
+         (first at residue {}: consensus gives {}, /translation has {})",
+        diffs.count() + 1,
+        found.len(),
+        pos + 1,
+        *a as char,
+        *b as char
+    ))
 }
 
 fn check_ct(r: &RawDfamRecord, d: &mut Vec<Diagnostic>) {
@@ -2775,6 +2855,106 @@ s1          ACGT\n\
     fn ft_cds_span_not_a_multiple_of_three_warns() {
         let r = ft_record(&["CDS 1..8"], "ACGTACGTAC");
         assert!(has_check(&lint_record(&r, None), "ft_cds_span_not_codons"));
+    }
+
+    fn ft_translation_warning(ft: &[&str], rf: &str) -> Option<Diagnostic> {
+        lint_record(&ft_record(ft, rf), None)
+            .into_iter()
+            .find(|x| x.check == "ft_translation_mismatch")
+    }
+
+    #[test]
+    fn ft_matching_translation_is_silent() {
+        // Gapped RF: the coordinates and the translation are both in ungapped space.
+        assert!(ft_translation_warning(
+            &["CDS 1..6", "/product=\"X\"", "/translation=\"MW\""],
+            "AT..GTG.G",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ft_wrong_translation_is_a_warning_not_an_error() {
+        let d = ft_translation_warning(&["CDS 1..6", "/translation=\"MQ\""], "ATGTGG").unwrap();
+        assert_eq!(d.severity, Severity::Warn);
+        assert!(d.message.contains("1 of 2 residues"), "{}", d.message);
+        assert!(d.message.contains("consensus gives W, /translation has Q"), "{}", d.message);
+    }
+
+    #[test]
+    fn ft_translation_length_difference_is_reported() {
+        let d = ft_translation_warning(&["CDS 1..6", "/translation=\"MWQ\""], "ATGTGG").unwrap();
+        assert!(d.message.contains("3 aa"), "{}", d.message);
+    }
+
+    #[test]
+    fn ft_translation_tolerates_a_terminal_stop_on_either_side() {
+        assert!(ft_translation_warning(&["CDS 1..9", "/translation=\"MW\""], "ATGTGGTAA").is_none());
+        assert!(ft_translation_warning(&["CDS 1..6", "/translation=\"MW*\""], "ATGTGG").is_none());
+        // An internal stop is not terminal, and must be stated to match.
+        assert!(ft_translation_warning(&["CDS 1..9", "/translation=\"M*W\""], "ATGTAATGG").is_none());
+        assert!(ft_translation_warning(&["CDS 1..9", "/translation=\"MQW\""], "ATGTAATGG").is_some());
+    }
+
+    #[test]
+    fn ft_translation_of_minus_strand_is_reverse_complemented() {
+        // Reverse complement of ATGTGG.
+        assert!(ft_translation_warning(&["CDS 6..1", "/translation=\"MW\""], "CCACAT").is_none());
+    }
+
+    #[test]
+    fn ft_translation_of_a_join_follows_segment_order_and_allows_overlap() {
+        // 1..6 = ATGTGG; 4..9 = TGGAAA, overlapping by three bases.
+        assert!(ft_translation_warning(
+            &["CDS join(1..6,4..9)", "/translation=\"MWWK\""],
+            "ATGTGGAAA",
+        )
+        .is_none());
+        // Skipping an in-frame stop (TAA at 4..6).
+        assert!(ft_translation_warning(
+            &["CDS join(1..3,7..9)", "/translation=\"MW\""],
+            "ATGTAATGG",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ft_translation_belongs_to_its_own_feature() {
+        // The first CDS has no translation; the second feature's must not be applied to it.
+        assert!(ft_translation_warning(
+            &["CDS 1..3", "CDS 4..6", "/translation=\"W\""],
+            "ATGTGG",
+        )
+        .is_none());
+        let d = ft_translation_warning(
+            &["CDS 1..3", "/translation=\"M\"", "CDS 4..6", "/translation=\"M\""],
+            "ATGTGG",
+        );
+        assert!(d.is_some());
+    }
+
+    #[test]
+    fn ft_translation_not_checked_when_span_or_coords_already_failed() {
+        // Past the end of RF, and not whole codons: each has its own diagnostic.
+        assert!(ft_translation_warning(&["CDS 1..99", "/translation=\"M\""], "ATGTGG").is_none());
+        assert!(ft_translation_warning(&["CDS 1..5", "/translation=\"M\""], "ATGTGG").is_none());
+    }
+
+    #[test]
+    fn ft_findings_are_all_warnings() {
+        let cases: &[(&[&str], &str)] = &[
+            (&["/product=\"orphan\""], "ft_orphan_qualifier"),
+            (&["CDS"], "ft_no_location"),
+            (&["CDS complement(1..9)"], "ft_location_invalid"),
+            (&["CDS 4..99"], "ft_coord_out_of_range"),
+            (&["CDS 1..8"], "ft_cds_span_not_codons"),
+            (&["CDS 1..3", "/translation=\"Q\""], "ft_translation_mismatch"),
+        ];
+        for (ft, check) in cases {
+            let d = lint_record(&ft_record(ft, "ACGTACGTAC"), None);
+            let hit = d.iter().find(|x| x.check == *check);
+            assert_eq!(hit.map(|x| x.severity), Some(Severity::Warn), "{}: {:?}", check, d);
+        }
     }
 
     #[test]

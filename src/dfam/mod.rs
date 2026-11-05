@@ -5,3 +5,4 @@ pub mod fetch;
 pub mod lint;
 pub mod record;
 pub mod repbase;
+pub mod translate;

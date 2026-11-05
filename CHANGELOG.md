@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 0.6.11 - 2026-11-4
+### Changed
+- Bumped to dfam-lib 0.2.5
+
 ## 0.6.10 - 2026-10-30
 ### Added
 - stk convert --to comsa: write the (cleaned) Stockholm output as a CoMSA

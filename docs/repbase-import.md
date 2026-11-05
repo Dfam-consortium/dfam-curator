@@ -174,9 +174,9 @@ Notes on the transform:
   CDS features in RepBase31.06, 98.9% of translations reproduce exactly from their
   location — but the ~1% that do not are mostly records whose location is itself
   broken (a CDS running past the end of its own sequence, a span that is not a
-  multiple of 3, or a mitochondrial genetic code), and those translations cannot be
-  recovered from the record at all. Dropping the field is irreversible; keeping it
-  is not.
+  multiple of 3, or a location in the wrong reading frame), and those translations
+  cannot be recovered from the record at all. Dropping the field is irreversible;
+  keeping it is not. `stk lint` reports the differences as `ft_translation_mismatch`.
 - Repbase locations use **descending coordinates for the minus strand** rather than
   `complement()`, and their `join()` segments may legitimately overlap. Both are
   documented in `Dfam_Seeds.md` under `FT`.

@@ -6,7 +6,7 @@ resolver = "2"
 # The consensus-building tools live here alongside linup/stk/discoord; the
 # alignment foundation they sit on is dfam-lib, consumed from its published tag.
 [workspace.package]
-version = "0.6.10"
+version = "0.6.11"
 edition = "2021"
 license = "CC0-1.0"
 
@@ -20,18 +20,18 @@ license = "CC0-1.0"
 # the foot of this file: cargo then substitutes the working copy for the tag
 # without the manifests changing, so what is committed stays reproducible.
 
-aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
-aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.4" }
+aln-core = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+aln-coord = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+dfam-stk-io = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+aln-engine = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+aln-parasail = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+aln-rmblast = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
+aln-reference = { git = "https://github.com/Dfam-consortium/dfam-lib", tag = "0.2.5" }
 cons-core = { path = "cons-core" }
 
 # RepeatAfterMe supplies the RAMExtend engine used by `te-composer --genome`,
 # consumed from its published tag like dfam-lib above. 
-ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "1.0.0" }
+ram-core = { git = "https://github.com/Dfam-consortium/RepeatAfterMe", tag = "1.0.1" }
 # Genomic identifiers on the input sequences are parsed with the canonical
 # Smitten implementation rather than a local regex, so that recursive ranges
 # normalize correctly.

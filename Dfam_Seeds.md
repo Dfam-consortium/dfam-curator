@@ -524,11 +524,20 @@ codon the curator judged not to be ancestral.
 
 | Check | Severity | Fires when |
 |-------|----------|------------|
-| `ft_orphan_qualifier` | error | a `/qualifier` line has no feature above it |
-| `ft_no_location` | error | a feature key has no location |
-| `ft_location_invalid` | error | the location is outside the grammar above |
-| `ft_coord_out_of_range` | error | a coordinate exceeds the ungapped `RF` length |
+| `ft_orphan_qualifier` | warn | a `/qualifier` line has no feature above it |
+| `ft_no_location` | warn | a feature key has no location |
+| `ft_location_invalid` | warn | the location is outside the grammar above |
+| `ft_coord_out_of_range` | warn | a coordinate exceeds the ungapped `RF` length |
 | `ft_cds_span_not_codons` | warn | a `CDS` span is not a multiple of 3 |
+| `ft_translation_mismatch` | warn | a `CDS` `/translation` differs from the translated consensus |
+
+`ft_translation_mismatch` translates the `CDS` location on the ungapped `RF` under the standard
+genetic code.  IUB ambiguity codes give a residue when every expansion agrees (`GTN` is `V`), and
+`X` otherwise.  One terminal stop (`*`) on either side is ignored.  It is skipped for a feature that
+already fails a location, range or span check.
+
+All `FT` checks are warnings: some Repbase families carry these defects, and they should not
+stop a record being converted.
 
 As with `CT`, note that `stk edit --update-consensus` rewrites `#=GC RF`.  `FT` coordinates
 are relative to that consensus, so they no longer describe it once it changes.
